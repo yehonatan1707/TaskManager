@@ -1,0 +1,14 @@
+{
+  "name": "personal-command-center",
+  "version": "1.0.0",
+  "description": "Production-Ready Personal Dashboard & Habit Tracker PWA",
+  "main": "backend/server.js",
+  "scripts": {
+    "start": "node backend/server.js",
+    "backend-install": "npm install --prefix backend",
+    "backend-start": "npm start --prefix backend"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

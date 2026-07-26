@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0F172A" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="קומנד סנטר" />
+  <meta name="description" content="לוח בקרה אישי – מעקב אימונים, ספרים, משימות ולוג למידה יומי" />
+  <title>Personal Command Center | לוח בקרה אישי</title>
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="apple-touch-icon" href="./assets/icon-192.png" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+
+<!-- ── AUTH SCREEN ─────────────────────────────────────────────────────────── -->
+<div id="auth-screen">
+  <div class="auth-logo">⚡</div>
+  <h1 class="auth-title">Personal Command Center</h1>
+  <p class="auth-subtitle">לוח הבקרה האישי שלך — אימונים, ספרים, משימות ולוג יומי</p>
+
+  <div class="auth-form">
+    <h2 id="auth-mode-title" style="font-size:20px;font-weight:800;text-align:center;color:var(--text-primary)">כניסה</h2>
+
+    <input id="auth-email" class="input-field" type="email"
+           placeholder="אימייל" autocomplete="email" />
+    <input id="auth-pass"  class="input-field" type="password"
+           placeholder="סיסמה (לפחות 6 תווים)" autocomplete="current-password" />
+
+    <button id="auth-submit-btn" class="btn btn-primary btn-full" onclick="app.authLogin()">כניסה</button>
+
+    <div class="auth-divider">או</div>
+
+    <button class="btn-google" onclick="app.authGoogle()">
+      <svg width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M43.6 20.5H42V20H24v8h11.3C33.65 32.1 29.3 35 24 35c-6.1 0-11-4.9-11-11s4.9-11 11-11c2.8 0 5.4 1.05 7.35 2.75l5.65-5.65C33.45 7.1 28.95 5 24 5 12.95 5 4 13.95 4 25s8.95 20 20 20c11.05 0 20-8.95 20-20 0-1.35-.15-2.65-.4-3.5z" fill="#FBC02D"/>
+        <path d="M6.3 14.7l6.55 4.8C14.65 16.1 19.05 13 24 13c2.8 0 5.4 1.05 7.35 2.75l5.65-5.65C33.45 7.1 28.95 5 24 5c-7.7 0-14.35 4.4-17.7 10.7z" fill="#E53935"/>
+        <path d="M24 45c4.85 0 9.3-1.85 12.65-4.85l-5.85-4.95C29.05 36.6 26.6 37.5 24 37.5c-5.3 0-9.65-2.9-11.3-7l-6.5 5.05C9.65 40.6 16.3 45 24 45z" fill="#4CAF50"/>
+        <path d="M43.6 20.5H42V20H24v8h11.3c-.8 2.25-2.25 4.2-4.15 5.55l.05-.05 5.85 4.95c-.4.35 6.35-4.65 6.35-14.45 0-1.35-.15-2.65-.4-3.5z" fill="#1565C0"/>
+      </svg>
+      כניסה עם Google
+    </button>
+
+    <p class="auth-switch text-center">
+      <span id="auth-switch-link" onclick="app.switchAuthMode()">אין לך חשבון? הירשם</span>
+    </p>
+  </div>
+</div>
+
+<!-- ── APP SHELL ────────────────────────────────────────────────────────────── -->
+<div id="app" style="visibility:hidden">
+
+  <!-- TOP HEADER -->
+  <header id="header">
+    <div class="header-inner">
+      <div>
+        <div class="header-title">⚡ קומנד סנטר</div>
+        <div id="header-date" class="header-date"></div>
+      </div>
+      <div id="streak-count" class="header-streak">🔥 0 שבועות ברצף!</div>
+      <div class="header-profile" title="פרופיל" onclick="app.navigateLogs()">👤</div>
+    </div>
+  </header>
+
+  <!-- ── SCREEN 1: HOME ────────────────────────────────────────────────────── -->
+  <section id="screen-home" class="screen active">
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">🏋️ אימון היום</div>
+        <div id="today-workout-completion" class="workout-completion">0%</div>
+      </div>
+      <div id="today-workout-name" class="today-workout-name">טוען…</div>
+      <div id="today-workout-meta" class="today-workout-meta"></div>
+      <div class="progress-bar mt-2">
+        <div id="today-workout-bar" class="progress-fill" style="width:0%"></div>
+      </div>
+    </div>
+
+    <div id="home-book-card" class="card">
+      <div class="empty-state"><div class="icon">📚</div><div class="msg">טוען ספרים…</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">📋 משימות יומיות פתוחות</div>
+      </div>
+      <div id="home-tasks-summary" class="task-list">
+        <div class="empty-state"><div class="icon">📋</div><div class="msg">טוען…</div></div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ── SCREEN 2: WORKOUTS ────────────────────────────────────────────────── -->
+  <section id="screen-workouts" class="screen">
+
+    <div class="card" style="padding:12px">
+      <div id="day-tabs" class="day-tabs"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">💪 תרגילים</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span id="workout-progress-label" class="text-sm text-muted">0/0 • 0%</span>
+          <button class="card-action-btn" onclick="app.openModal('add-exercise-modal')">+ תרגיל</button>
+        </div>
+      </div>
+      <div class="progress-bar">
+        <div id="workout-progress-bar" class="progress-fill" style="width:0%"></div>
+      </div>
+      <div id="exercise-list" class="exercise-list" style="margin-top:12px"></div>
+    </div>
+
+  </section>
+
+  <!-- ── SCREEN 3: BOOKS ───────────────────────────────────────────────────── -->
+  <section id="screen-books" class="screen">
+
+    <div class="card-header" style="padding:0 4px">
+      <div class="card-title" style="font-size:16px;font-weight:800;color:var(--text-primary)">📖 ספרים פעילים</div>
+      <button class="btn btn-sm btn-indigo" onclick="app.openModal('add-book-modal')">+ הוסף ספר</button>
+    </div>
+
+    <div id="active-books-list" class="flex flex-col gap-3">
+      <div class="empty-state"><div class="icon">📚</div><div class="msg">טוען ספרים…</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title" style="margin-bottom:12px">🏆 ספרים שסיימתי</div>
+      <div id="finished-books-list" class="books-archive"></div>
+    </div>
+
+  </section>
+
+  <!-- ── SCREEN 4: TASKS ───────────────────────────────────────────────────── -->
+  <section id="screen-tasks" class="screen">
+
+    <div class="flex items-center justify-between" style="padding:0 4px">
+      <div class="toggle-group">
+        <button id="tab-daily"  class="toggle-btn active" onclick="app.setTaskFilter('daily')">יומי</button>
+        <button id="tab-weekly" class="toggle-btn"        onclick="app.setTaskFilter('weekly')">שבועי</button>
+      </div>
+      <button class="btn btn-sm btn-primary" onclick="app.openModal('add-task-modal')">+ משימה</button>
+    </div>
+
+    <div class="flex items-center justify-between" style="padding:0 4px">
+      <label class="visibility-toggle">
+        <div class="toggle-switch">
+          <input type="checkbox" id="show-completed-toggle"
+                 onchange="app.toggleShowCompleted(this)">
+          <div class="toggle-switch-track"></div>
+        </div>
+        הצג משימות שהושלמו
+      </label>
+      <span id="completed-count" class="text-sm text-muted"></span>
+    </div>
+
+    <div id="task-list" class="task-list"></div>
+
+  </section>
+
+  <!-- ── SCREEN 5: LOGS & SETTINGS ─────────────────────────────────────────── -->
+  <section id="screen-logs" class="screen">
+
+    <!-- Daily Reflection -->
+    <div class="card">
+      <div class="card-title" style="margin-bottom:14px">📓 רפלקציה יומית</div>
+      <div class="log-form">
+        <div class="log-input-group">
+          <label class="log-label">🐧 פקודת Linux / טכנולוגיה של היום</label>
+          <textarea id="log-linux" class="log-textarea ltr"
+                    placeholder="e.g.  grep -r 'pattern' ./dir | wc -l"></textarea>
+        </div>
+        <div class="log-input-group">
+          <label class="log-label">📈 הערה על שוק / גרף</label>
+          <textarea id="log-market" class="log-textarea"
+                    placeholder="נר יומי של BTC נסגר מעל ה-EMA 21…"></textarea>
+        </div>
+        <div class="log-input-group">
+          <label class="log-label">🏆 Win היומי שלי</label>
+          <textarea id="log-win" class="log-textarea"
+                    placeholder="סיימתי את הפרק ב-Rust, הלכתי לאימון ב-07:00…"></textarea>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="app.saveLog()">💾 שמור יומן</button>
+      </div>
+    </div>
+
+    <!-- History -->
+    <div class="card">
+      <div class="card-title" style="margin-bottom:12px">📚 היסטוריה</div>
+      <div id="log-history" class="log-history"></div>
+    </div>
+
+    <!-- Settings -->
+    <div class="card">
+      <div class="card-title" style="margin-bottom:12px">⚙️ הגדרות</div>
+      <div class="settings-group">
+        <div class="settings-row">
+          <div class="settings-row-label">👤 <span id="settings-user-name">—</span></div>
+          <div class="settings-row-value" id="settings-user-email"></div>
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-label">🔗 מצב חיבור</div>
+          <div class="settings-row-value" id="settings-mode-badge"></div>
+        </div>
+        <div class="settings-row" onclick="app.syncStreak()" style="cursor:pointer">
+          <div class="settings-row-label">🔥 עדכן רצף שבועי ידנית</div>
+          <div class="settings-row-value" id="settings-streak-val">0 שבועות</div>
+        </div>
+        <div class="settings-row" onclick="app.logOut()" style="cursor:pointer">
+          <div class="settings-row-label" style="color:var(--accent-rose)">🚪 התנתקות</div>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- BOTTOM NAV -->
+  <nav id="bottom-nav" aria-label="ניווט ראשי">
+    <div class="nav-items">
+      <button class="nav-item active" data-screen="home"     id="nav-home">
+        <span class="nav-icon">🏠</span>
+        <span class="nav-label">בית</span>
+      </button>
+      <button class="nav-item" data-screen="workouts" id="nav-workouts">
+        <span class="nav-icon">🏋️</span>
+        <span class="nav-label">אימונים</span>
+      </button>
+      <button class="nav-item" data-screen="books"    id="nav-books">
+        <span class="nav-icon">📖</span>
+        <span class="nav-label">ספרים</span>
+      </button>
+      <button class="nav-item" data-screen="tasks"    id="nav-tasks">
+        <span class="nav-icon">📋</span>
+        <span class="nav-label">משימות</span>
+      </button>
+      <button class="nav-item" data-screen="logs"     id="nav-logs">
+        <span class="nav-icon">⚙️</span>
+        <span class="nav-label">לוג</span>
+      </button>
+    </div>
+  </nav>
+
+</div><!-- /#app -->
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     MODALS
+══════════════════════════════════════════════════════════════════════════ -->
+
+<!-- Add Book Modal -->
+<div id="add-book-modal" class="modal-overlay">
+  <div class="modal-sheet" role="dialog" aria-labelledby="modal-book-title">
+    <div class="modal-handle"></div>
+    <div id="modal-book-title" class="modal-title">📚 הוסף ספר חדש</div>
+    <div class="modal-form">
+      <input id="new-book-title" class="input-field" type="text"
+             placeholder="שם הספר" autocomplete="off" />
+      <input id="new-book-pages" class="input-field" type="number"
+             placeholder="מספר עמודים" min="1" />
+      <div class="flex gap-2">
+        <button class="btn btn-primary btn-full" onclick="app.submitAddBook()">הוסף ספר</button>
+        <button class="btn btn-ghost"            onclick="app.closeModal('add-book-modal')">ביטול</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Task Modal -->
+<div id="add-task-modal" class="modal-overlay">
+  <div class="modal-sheet" role="dialog" aria-labelledby="modal-task-title">
+    <div class="modal-handle"></div>
+    <div id="modal-task-title" class="modal-title">📋 הוסף משימה חדשה</div>
+    <div class="modal-form">
+      <input id="new-task-text" class="input-field" type="text"
+             placeholder="תוכן המשימה…" autocomplete="off" />
+      <div class="flex gap-2">
+        <button class="btn btn-primary btn-full" onclick="app.submitAddTask()">הוסף</button>
+        <button class="btn btn-ghost"            onclick="app.closeModal('add-task-modal')">ביטול</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Exercise Modal -->
+<div id="add-exercise-modal" class="modal-overlay">
+  <div class="modal-sheet" role="dialog" aria-labelledby="modal-ex-title">
+    <div class="modal-handle"></div>
+    <div id="modal-ex-title" class="modal-title">🏋️ הוסף תרגיל חדש</div>
+    <div class="modal-form">
+      <input id="new-ex-name"   class="input-field" type="text"    placeholder="שם התרגיל" autocomplete="off" />
+      <input id="new-ex-sets"   class="input-field" type="number"  placeholder="מספר סטים (ברירת מחדל: 3)" min="1" max="10" />
+      <input id="new-ex-reps"   class="input-field" type="text"    placeholder="חזרות (למשל: 12 / Failure)" />
+      <input id="new-ex-weight" class="input-field" type="text"    placeholder="משקל (אופציונלי: 20kg)" />
+      <div class="flex gap-2">
+        <button class="btn btn-primary btn-full" onclick="app.submitAddExercise()">הוסף תרגיל</button>
+        <button class="btn btn-ghost"            onclick="app.closeModal('add-exercise-modal')">ביטול</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Exercise Modal -->
+<div id="edit-exercise-modal" class="modal-overlay">
+  <div class="modal-sheet" role="dialog" aria-labelledby="modal-edit-ex-title">
+    <div class="modal-handle"></div>
+    <div id="modal-edit-ex-title" class="modal-title">✏️ ערוך תרגיל</div>
+    <input type="hidden" id="edit-ex-index" />
+    <div class="modal-form">
+      <input id="edit-ex-name" class="input-field" type="text" placeholder="שם התרגיל" />
+      <input id="edit-ex-tag"  class="input-field" type="text" placeholder="תיאור (3×12 / Warmup…)" />
+      <div class="flex gap-2">
+        <button class="btn btn-primary btn-full" onclick="app.submitEditExercise()">שמור שינויים</button>
+        <button class="btn btn-ghost"            onclick="app.closeModal('edit-exercise-modal')">ביטול</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── TOAST ──────────────────────────────────────────────────────────────── -->
+<div id="toast" role="status" aria-live="polite"></div>
+
+<!-- ── SCRIPTS ────────────────────────────────────────────────────────────── -->
+<script type="module" src="./app.js"></script>
+<script>
+  // Convenience: allow navigating to logs from header profile icon
+  window.app = window.app || {};
+  // navigateLogs will be called before app.js fully defines navigateTo,
+  // so we attach it lazily after module load
+  window.app.navigateLogs = () => {
+    document.querySelector('.nav-item[data-screen="logs"]')?.click();
+  };
+</script>
+
+</body>
+</html>

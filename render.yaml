@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: personal-command-center-backend
+    env: node
+    plan: starter
+    buildCommand: npm run backend-install
+    startCommand: npm run start
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SQLITE_DB_PATH
+        value: /var/data/database.sqlite
+    disk:
+      name: sqlite-data
+      mountPath: /var/data
+      sizeGB: 1
