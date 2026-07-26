@@ -6,12 +6,12 @@
 
 // ─── PASTE YOUR FIREBASE CONFIG HERE ──────────────────────────────────────────
 const FIREBASE_CONFIG = {
-  apiKey:            "",
-  authDomain:        "",
-  projectId:         "",
-  storageBucket:     "",
-  messagingSenderId: "",
-  appId:             ""
+  apiKey:            "AIzaSyBaJ2VOB4Ne-4ZVLPQDvvfLvMkwWuPqATU",
+  authDomain:        "personal-command-center-pwa.firebaseapp.com",
+  projectId:         "personal-command-center-pwa",
+  storageBucket:     "personal-command-center-pwa.firebasestorage.app",
+  messagingSenderId: "751970285468",
+  appId:             "1:751970285468:web:2a87d57a34ca34029d3a59"
 };
 // ──────────────────────────────────────────────────────────────────────────────
 
