@@ -234,20 +234,47 @@ export async function register(email, password) {
 }
 
 /**
- * Sign in with Google — uses REDIRECT (works on all browsers + mobile).
- * After the redirect, checkRedirectResult() will pick up the user.
+ * Sign in with Google.
+ * Tries popup first (instant, works on desktop).
+ * Falls back to redirect if popup is blocked (works on mobile).
  */
 export async function signInGoogle() {
-  if (!USE_FIREBASE || !_fbModules) {
-    // Mock mode: instant login
+  if (!USE_FIREBASE) {
+    // No Firebase config — return mock user so caller can handle it
     currentUser = { uid: 'demo_user', email: 'demo@commandcenter.app', displayName: 'Demo User' };
     localStorage.setItem('pcc_mock_user', JSON.stringify(currentUser));
     return currentUser;
   }
+
+  // Always ensure Firebase is initialized before attempting auth
+  await initFirebase();
+
   const { GoogleAuthProvider, signInWithRedirect } = _fbModules;
+  // Dynamically import popup (only used on desktop)
+  const { signInWithPopup } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js');
+
   const provider = new GoogleAuthProvider();
-  await signInWithRedirect(_auth, provider);
-  // Page will redirect to Google, then come back — result handled by checkRedirectResult()
+
+  try {
+    // Try popup first — faster, works on desktop
+    const cred = await signInWithPopup(_auth, provider);
+    currentUser = {
+      uid: cred.user.uid,
+      email: cred.user.email,
+      displayName: cred.user.displayName || cred.user.email
+    };
+    return currentUser;
+  } catch (popupErr) {
+    // Popup blocked (mobile) or not allowed — fall back to redirect
+    const code = popupErr.code || '';
+    if (code === 'auth/popup-blocked' || code === 'auth/cancelled-popup-request' ||
+        code === 'auth/popup-closed-by-user') {
+      // Will navigate away; result handled by checkRedirectResult on next load
+      await signInWithRedirect(_auth, provider);
+      return null; // page is navigating
+    }
+    throw popupErr; // real error — propagate up
+  }
 }
 
 /** Demo / Guest login — no account needed, data stored locally */

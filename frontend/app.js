@@ -572,16 +572,20 @@ window.app.authRegister = async () => {
   }
 };
 window.app.authGoogle = async () => {
-  const btn = document.querySelector('.btn-google');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ מעביר לגוגל...'; }
+  const btn = document.getElementById('btn-google');
+  const origHtml = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ מתחבר לגוגל...'; }
   try {
-    await signInGoogle();
-    // If mock mode, Google login returns immediately
-    // If real Firebase, the page will redirect — no further code runs
+    const user = await signInGoogle();
+    if (user) {
+      // Popup or mock succeeded — navigate into the app
+      await onUserSignedIn(user);
+    }
+    // If user is null: redirect is happening, page is navigating away
   } catch (e) {
     console.error('Google auth error:', e);
-    showToast('שגיאה בכניסה עם Google: ' + (e.message || ''));
-    if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M43.6 20.5H42V20H24v8h11.3C33.65 32.1 29.3 35 24 35c-6.1 0-11-4.9-11-11s4.9-11 11-11c2.8 0 5.4 1.05 7.35 2.75l5.65-5.65C33.45 7.1 28.95 5 24 5 12.95 5 4 13.95 4 25s8.95 20 20 20c11.05 0 20-8.95 20-20 0-1.35-.15-2.65-.4-3.5z" fill="#FBC02D"/></svg> כניסה עם Google'; }
+    showToast('Google: ' + authError(e));
+    if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
   }
 };
 window.app.authDemo = async () => {
