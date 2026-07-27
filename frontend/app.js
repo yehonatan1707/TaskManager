@@ -2,7 +2,7 @@
  * app.js — Personal Command Center
  * Main application: state management, screen rendering, CRUD operations
  */
-import { initAuth, getCollection, settingsStore, signIn, register, signInGoogle, logOut, currentUser, isMockMode } from './firebase.js';
+import { initAuth, checkRedirectResult, getCollection, settingsStore, signIn, register, signInGoogle, signInDemo, logOut, currentUser, isMockMode } from './firebase.js';
 
 // ─── App State ───────────────────────────────────────────────────────────────
 const state = {
@@ -521,33 +521,80 @@ window.app.syncStreak = async () => {
   showToast(`🔥 רצף: ${state.streak} שבועות!`);
 };
 
+// ─── Auth Helpers ────────────────────────────────────────────────────────────
+function setAuthBtnLoading(btnId, loading, originalText) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  btn.disabled = loading;
+  btn.textContent = loading ? '⏳ טוען...' : originalText;
+}
+
+const AUTH_ERRORS = {
+  'auth/user-not-found':        'משתמש לא נמצא. האם להירשם?',
+  'auth/wrong-password':        'סיסמה שגויה',
+  'auth/invalid-credential':    'אימייל או סיסמה שגויים',
+  'auth/email-already-in-use':  'האימייל כבר רשום. נסה להיכנס במקום',
+  'auth/weak-password':         'הסיסמה קצרה מדי (לפחות 6 תווים)',
+  'auth/invalid-email':         'כתובת אימייל לא תקינה',
+  'auth/too-many-requests':     'יותר מדי ניסיונות. המתן דקה ונסה שוב',
+  'auth/network-request-failed':'בעיית רשת. בדוק חיבור לאינטרנט',
+};
+function authError(e) {
+  const code = e.code || '';
+  return AUTH_ERRORS[code] || e.message || 'שגיאה לא ידועה';
+}
+
 // ─── Auth ────────────────────────────────────────────────────────────────────
 window.app.authLogin = async () => {
   const email = document.getElementById('auth-email').value.trim();
   const pass  = document.getElementById('auth-pass').value;
   if (!email || !pass) { showToast('מלא אימייל וסיסמה'); return; }
+  setAuthBtnLoading('auth-submit-btn', true, 'כניסה');
   try {
     await signIn(email, pass);
   } catch (e) {
-    showToast(`שגיאה: ${e.message?.split('(')[1]?.replace(')','') || e.message}`);
+    console.error('Login error:', e);
+    showToast(authError(e));
+    setAuthBtnLoading('auth-submit-btn', false, 'כניסה');
   }
 };
 window.app.authRegister = async () => {
   const email = document.getElementById('auth-email').value.trim();
   const pass  = document.getElementById('auth-pass').value;
   if (!email || !pass) { showToast('מלא אימייל וסיסמה'); return; }
+  setAuthBtnLoading('auth-submit-btn', true, 'הרשמה');
   try {
     await register(email, pass);
   } catch (e) {
-    showToast(`שגיאה: ${e.message?.split('(')[1]?.replace(')','') || e.message}`);
+    console.error('Register error:', e);
+    showToast(authError(e));
+    setAuthBtnLoading('auth-submit-btn', false, 'הרשמה');
   }
 };
 window.app.authGoogle = async () => {
-  try { await signInGoogle(); } catch (e) { showToast('שגיאה בכניסה עם Google'); }
+  const btn = document.querySelector('.btn-google');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ מעביר לגוגל...'; }
+  try {
+    await signInGoogle();
+    // If mock mode, Google login returns immediately
+    // If real Firebase, the page will redirect — no further code runs
+  } catch (e) {
+    console.error('Google auth error:', e);
+    showToast('שגיאה בכניסה עם Google: ' + (e.message || ''));
+    if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M43.6 20.5H42V20H24v8h11.3C33.65 32.1 29.3 35 24 35c-6.1 0-11-4.9-11-11s4.9-11 11-11c2.8 0 5.4 1.05 7.35 2.75l5.65-5.65C33.45 7.1 28.95 5 24 5 12.95 5 4 13.95 4 25s8.95 20 20 20c11.05 0 20-8.95 20-20 0-1.35-.15-2.65-.4-3.5z" fill="#FBC02D"/></svg> כניסה עם Google'; }
+  }
+};
+window.app.authDemo = async () => {
+  signInDemo();
+  // onAuthStateChanged won't fire for demo — call bootstrap callback manually
+  await onUserSignedIn({
+    uid: 'demo_user_local', email: 'demo@local', displayName: '👤 Demo User'
+  });
 };
 window.app.logOut = async () => {
   await logOut();
   state.user = null;
+  state.books = []; state.tasks = []; state.logs = []; state.streak = 0;
   showAuthScreen();
 };
 
@@ -672,6 +719,32 @@ function escHtml(str) {
     .replace(/"/g,'&quot;');
 }
 
+// ─── User sign-in handler (shared by all auth paths) ───────────────────────
+async function onUserSignedIn(user) {
+  state.user = user;
+  initCollections();
+
+  try {
+    const [books, tasks, logs, settings] = await Promise.all([
+      colBooks.getAll(),
+      colTasks.getAll(),
+      colLogs.getAll(),
+      settingsStore.get(),
+    ]);
+    state.books  = books;
+    state.tasks  = tasks;
+    state.logs   = logs;
+    state.streak = settings.streak || 0;
+  } catch (e) {
+    console.warn('Data load error:', e);
+  }
+
+  await loadWorkoutData();
+  updateHeader();
+  hideAuthScreen();
+  navigateTo('home');
+}
+
 // ─── Bootstrap ───────────────────────────────────────────────────────────────
 async function bootstrap() {
   // Register Service Worker
@@ -679,32 +752,27 @@ async function bootstrap() {
     navigator.serviceWorker.register('./sw.js').catch(console.warn);
   }
 
-  // Show auth screen while loading
+  // Show loading state on auth screen
   showAuthScreen();
 
+  // Step 1: Check if returning from a Google redirect sign-in
+  try {
+    const redirectUser = await checkRedirectResult();
+    if (redirectUser) {
+      await onUserSignedIn(redirectUser);
+      return;
+    }
+  } catch (e) {
+    console.warn('Redirect check failed:', e);
+  }
+
+  // Step 2: Set up ongoing auth state listener
   await initAuth(async (user) => {
-    if (!user) { showAuthScreen(); return; }
-
-    state.user = user;
-    initCollections();
-
-    // Load all data in parallel
-    const [books, tasks, logs, settings] = await Promise.all([
-      colBooks.getAll(),
-      colTasks.getAll(),
-      colLogs.getAll(),
-      settingsStore.get(),
-    ]);
-
-    state.books    = books;
-    state.tasks    = tasks;
-    state.logs     = logs;
-    state.streak   = settings.streak || 0;
-
-    await loadWorkoutData();
-    updateHeader();
-    hideAuthScreen();
-    navigateTo('home');
+    if (!user) {
+      showAuthScreen();
+      return;
+    }
+    await onUserSignedIn(user);
   });
 }
 
@@ -713,4 +781,4 @@ document.querySelectorAll('.nav-item').forEach(btn => {
   btn.addEventListener('click', () => navigateTo(btn.dataset.screen));
 });
 
-bootstrap();
+bootstrap().catch(e => console.error('Bootstrap failed:', e));
