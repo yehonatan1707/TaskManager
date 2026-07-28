@@ -4,7 +4,6 @@
  *            If config is empty/missing  → full localStorage mock
  */
 
-// ─── PASTE YOUR FIREBASE CONFIG HERE ──────────────────────────────────────────
 const FIREBASE_CONFIG = {
   apiKey:            "AIzaSyBaJ2VOB4Ne-4ZVLPQDvvfLvMkwWuPqATU",
   authDomain:        "personal-command-center-pwa.firebaseapp.com",
@@ -13,11 +12,9 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "751970285468",
   appId:             "1:751970285468:web:2a87d57a34ca34029d3a59"
 };
-// ──────────────────────────────────────────────────────────────────────────────
 
 const USE_FIREBASE = !!(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey.length > 0);
 
-// ─── localStorage Mock DB ────────────────────────────────────────────────────
 const LS_KEY = 'pcc_data';
 
 function lsGet() {
@@ -46,40 +43,30 @@ class MockCollection {
   async remove(id) { this._write(this._all().filter(d => d.id !== id)); }
 }
 
-// ─── Real Firestore Helpers ──────────────────────────────────────────────────
 let _db = null;
 let _auth = null;
 let _fbModules = null;
 let _initPromise = null;
 
 async function initFirebase() {
-  if (_fbModules) return; // already initialized
+  if (_fbModules) return;
   if (_initPromise) return _initPromise;
 
   _initPromise = (async () => {
     const { initializeApp, getApps } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js');
-    const {
-      getAuth, onAuthStateChanged,
-      signInWithEmailAndPassword, createUserWithEmailAndPassword,
-      GoogleAuthProvider, signInWithRedirect, getRedirectResult, signOut
-    } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js');
-    const {
-      getFirestore, collection, getDocs, addDoc, updateDoc,
-      deleteDoc, doc, serverTimestamp, query, orderBy
-    } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+    const { getFirestore, collection, doc, getDocs, addDoc, updateDoc, deleteDoc, query, orderBy } =
+      await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+    const { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } =
+      await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js');
 
-    const firebaseApp = getApps().length === 0
-      ? initializeApp(FIREBASE_CONFIG)
-      : getApps()[0];
-
-    _db   = getFirestore(firebaseApp);
-    _auth = getAuth(firebaseApp);
+    const app = getApps().length === 0 ? initializeApp(FIREBASE_CONFIG) : getApps()[0];
+    _db   = getFirestore(app);
+    _auth = getAuth(app);
 
     _fbModules = {
-      onAuthStateChanged,
-      signInWithEmailAndPassword, createUserWithEmailAndPassword,
-      GoogleAuthProvider, signInWithRedirect, getRedirectResult, signOut,
-      collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, orderBy
+      collection, doc, getDocs, addDoc, updateDoc, deleteDoc, query, orderBy,
+      onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
+      signOut, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult
     };
   })();
 
@@ -87,132 +74,112 @@ async function initFirebase() {
 }
 
 class FirestoreCollection {
-  constructor(uid, col) {
+  constructor(uid, colName) {
     this.uid = uid;
-    this.col = col;
-    const { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, orderBy } = _fbModules;
-    this._col  = collection(_db, `users/${uid}/${col}`);
-    this._fns  = { getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, orderBy };
+    this.colName = colName;
   }
-
+  _colRef() {
+    const { collection } = _fbModules;
+    return collection(_db, 'users', this.uid, this.colName);
+  }
   async getAll() {
-    const { getDocs, query, orderBy } = this._fns;
-    try {
-      const q = query(this._col, orderBy('_createdAt', 'asc'));
-      const snap = await getDocs(q);
-      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    } catch { return []; }
+    const { getDocs } = _fbModules;
+    const snap = await getDocs(this._colRef());
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
   }
-
   async add(data) {
-    const { addDoc, serverTimestamp } = this._fns;
-    const ref = await addDoc(this._col, { ...data, _createdAt: serverTimestamp() });
-    return { id: ref.id, ...data };
+    const { addDoc } = _fbModules;
+    const payload = { ...data, _createdAt: Date.now() };
+    const ref = await addDoc(this._colRef(), payload);
+    return { id: ref.id, ...payload };
   }
-
   async update(id, data) {
-    const { updateDoc, doc } = this._fns;
-    await updateDoc(doc(this._col, id), { ...data, _updatedAt: serverTimestamp() });
+    const { doc, updateDoc } = _fbModules;
+    const ref = doc(_db, 'users', this.uid, this.colName, id);
+    await updateDoc(ref, { ...data, _updatedAt: Date.now() });
   }
-
   async remove(id) {
-    const { deleteDoc, doc } = this._fns;
-    await deleteDoc(doc(this._col, id));
+    const { doc, deleteDoc } = _fbModules;
+    const ref = doc(_db, 'users', this.uid, this.colName, id);
+    await deleteDoc(ref);
   }
 }
-
-// ─── Public API ──────────────────────────────────────────────────────────────
 
 export let currentUser = null;
+export let isMockMode   = !USE_FIREBASE;
 
-export function getCollection(name) {
-  if (!currentUser) throw new Error('Not authenticated');
-  // Use Firestore only if Firebase is configured AND initialized
-  return (USE_FIREBASE && _fbModules)
-    ? new FirestoreCollection(currentUser.uid, name)
-    : new MockCollection(currentUser.uid, name);
+export async function initAuth(onUserChanged) {
+  if (!USE_FIREBASE) {
+    const saved = localStorage.getItem('pcc_mock_user');
+    currentUser = saved ? JSON.parse(saved) : null;
+    onUserChanged(currentUser);
+    return;
+  }
+
+  await initFirebase();
+  const { onAuthStateChanged } = _fbModules;
+  onAuthStateChanged(_auth, (user) => {
+    currentUser = user;
+    isMockMode  = false;
+    onUserChanged(user);
+  });
 }
 
-export const settingsStore = {
-  async get() {
-    try {
-      const col = getCollection('settings');
-      const all = await col.getAll();
-      return all[0] || {};
-    } catch { return {}; }
-  },
-  async set(data) {
-    try {
-      const col = getCollection('settings');
-      const all = await col.getAll();
-      if (all[0]) await col.update(all[0].id, data);
-      else await col.add(data);
-    } catch (e) { console.warn('Settings save failed:', e); }
-  }
-};
-
-/**
- * Check if a redirect sign-in result is pending (called on every page load).
- * Returns the user object if a redirect completed, or null.
- */
 export async function checkRedirectResult() {
   if (!USE_FIREBASE) return null;
+  await initFirebase();
+  const { getRedirectResult } = _fbModules;
   try {
-    await initFirebase();
-    const { getRedirectResult } = _fbModules;
     const result = await getRedirectResult(_auth);
     if (result?.user) {
-      currentUser = {
-        uid: result.user.uid,
-        email: result.user.email,
-        displayName: result.user.displayName
-      };
-      return currentUser;
+      currentUser = result.user;
+      return result.user;
     }
   } catch (e) {
-    console.warn('Redirect result error:', e);
+    console.warn('Redirect sign-in error:', e);
   }
   return null;
 }
 
-/**
- * Initialise Firebase auth listener.
- * callback(user) fires immediately with current state, then on every change.
- */
-export async function initAuth(callback) {
-  if (!USE_FIREBASE) {
-    const saved = localStorage.getItem('pcc_mock_user');
-    currentUser = saved ? JSON.parse(saved) : null;
-    callback(currentUser);
-    return;
+export function getCollection(name) {
+  if (!currentUser) throw new Error('Must be signed in to access collections');
+  if (isMockMode) {
+    return new MockCollection(currentUser.uid, name);
   }
-
-  try {
-    await initFirebase();
-  } catch (e) {
-    console.error('Firebase init failed, falling back to mock mode:', e);
-    const saved = localStorage.getItem('pcc_mock_user');
-    currentUser = saved ? JSON.parse(saved) : null;
-    callback(currentUser);
-    return;
-  }
-
-  const { onAuthStateChanged } = _fbModules;
-  return new Promise((resolve) => {
-    onAuthStateChanged(_auth, (fbUser) => {
-      currentUser = fbUser
-        ? { uid: fbUser.uid, email: fbUser.email, displayName: fbUser.displayName || fbUser.email }
-        : null;
-      callback(currentUser);
-      resolve(currentUser);
-    });
-  });
+  return new FirestoreCollection(currentUser.uid, name);
 }
 
-/** Sign in with email/password */
+export const settingsStore = {
+  async get() {
+    if (isMockMode) {
+      return JSON.parse(localStorage.getItem(`pcc_settings_${currentUser.uid}`) || '{}');
+    }
+    const { doc, getDocs, collection } = _fbModules;
+    const snap = await getDocs(collection(_db, 'users', currentUser.uid, 'settings'));
+    const docData = snap.docs[0]?.data() || {};
+    return docData;
+  },
+  async set(data) {
+    if (isMockMode) {
+      const existing = await this.get();
+      localStorage.setItem(`pcc_settings_${currentUser.uid}`, JSON.stringify({ ...existing, ...data }));
+      return;
+    }
+    const { collection, addDoc, updateDoc, getDocs } = _fbModules;
+    const colRef = collection(_db, 'users', currentUser.uid, 'settings');
+    const snap = await getDocs(colRef);
+    if (snap.empty) {
+      await addDoc(colRef, data);
+    } else {
+      await updateDoc(snap.docs[0].ref, data);
+    }
+  }
+};
+
 export async function signIn(email, password) {
   if (!USE_FIREBASE || !_fbModules) {
     currentUser = { uid: `local_${email}`, email, displayName: email.split('@')[0] };
+    isMockMode = true;
     localStorage.setItem('pcc_mock_user', JSON.stringify(currentUser));
     return currentUser;
   }
@@ -221,10 +188,10 @@ export async function signIn(email, password) {
   return cred.user;
 }
 
-/** Register a new account with email/password */
 export async function register(email, password) {
   if (!USE_FIREBASE || !_fbModules) {
     currentUser = { uid: `local_${email}`, email, displayName: email.split('@')[0] };
+    isMockMode = true;
     localStorage.setItem('pcc_mock_user', JSON.stringify(currentUser));
     return currentUser;
   }
@@ -233,30 +200,19 @@ export async function register(email, password) {
   return cred.user;
 }
 
-/**
- * Sign in with Google.
- * Tries popup first (instant, works on desktop).
- * Falls back to redirect if popup is blocked (works on mobile).
- */
 export async function signInGoogle() {
   if (!USE_FIREBASE) {
-    // No Firebase config — return mock user so caller can handle it
     currentUser = { uid: 'demo_user', email: 'demo@commandcenter.app', displayName: 'Demo User' };
+    isMockMode = true;
     localStorage.setItem('pcc_mock_user', JSON.stringify(currentUser));
     return currentUser;
   }
 
-  // Always ensure Firebase is initialized before attempting auth
   await initFirebase();
-
-  const { GoogleAuthProvider, signInWithRedirect } = _fbModules;
-  // Dynamically import popup (only used on desktop)
-  const { signInWithPopup } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js');
-
+  const { GoogleAuthProvider, signInWithRedirect, signInWithPopup } = _fbModules;
   const provider = new GoogleAuthProvider();
 
   try {
-    // Try popup first — faster, works on desktop
     const cred = await signInWithPopup(_auth, provider);
     currentUser = {
       uid: cred.user.uid,
@@ -265,39 +221,25 @@ export async function signInGoogle() {
     };
     return currentUser;
   } catch (popupErr) {
-    // Popup blocked (mobile) or not allowed — fall back to redirect
-    const code = popupErr.code || '';
-    if (code === 'auth/popup-blocked' || code === 'auth/cancelled-popup-request' ||
-        code === 'auth/popup-closed-by-user') {
-      // Will navigate away; result handled by checkRedirectResult on next load
-      await signInWithRedirect(_auth, provider);
-      return null; // page is navigating
-    }
-    throw popupErr; // real error — propagate up
+    console.warn('Popup blocked/failed, falling back to redirect:', popupErr);
+    await signInWithRedirect(_auth, provider);
+    return null;
   }
 }
 
-/** Demo / Guest login — no account needed, data stored locally */
 export function signInDemo() {
-  currentUser = {
-    uid: 'demo_user_local',
-    email: 'demo@local',
-    displayName: '👤 Demo User'
-  };
+  currentUser = { uid: 'demo_user_local', email: 'demo@local', displayName: '👤 Demo User' };
+  isMockMode  = true;
   localStorage.setItem('pcc_mock_user', JSON.stringify(currentUser));
   return currentUser;
 }
 
-/** Sign out */
 export async function logOut() {
-  localStorage.removeItem('pcc_mock_user');
-  if (USE_FIREBASE && _fbModules && _auth) {
-    try {
-      const { signOut } = _fbModules;
-      await signOut(_auth);
-    } catch (e) { console.warn('Sign out error:', e); }
+  if (USE_FIREBASE && _auth && _fbModules) {
+    const { signOut } = _fbModules;
+    await signOut(_auth);
   }
+  localStorage.removeItem('pcc_mock_user');
   currentUser = null;
+  isMockMode = !USE_FIREBASE;
 }
-
-export const isMockMode = !USE_FIREBASE;

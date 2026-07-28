@@ -13,7 +13,6 @@ const ASSETS = [
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      // Warm up cache, ignore errors on icons if not present yet
       return cache.addAll(ASSETS).catch(err => console.log('SW Cache Warmup Error: ', err));
     }).then(() => self.skipWaiting())
   );
@@ -35,10 +34,7 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
-  
   const url = new URL(e.request.url);
-  
-  // Apply Network-First strategy for local origins (excluding Firebase API domain fetch requests)
   if (url.origin === self.location.origin) {
     e.respondWith(
       fetch(e.request)

@@ -4,34 +4,26 @@
  */
 import { initAuth, checkRedirectResult, getCollection, settingsStore, signIn, register, signInGoogle, signInDemo, logOut, currentUser, isMockMode } from './firebase.js';
 
-// ─── App State ───────────────────────────────────────────────────────────────
 const state = {
   currentScreen: 'home',
   user: null,
   loading: false,
 
-  // Workout
-  selectedDay: new Date().getDay(), // 0=Sun … 6=Sat
-  workoutData: {},   // { dayIndex: { sets: [{id,done}] } } — from DB
-  exercises: [],     // raw exercise docs from DB
+  selectedDay: new Date().getDay(),
+  workoutData: {},
+  exercises: [],
 
-  // Books
   books: [],
   activeBook: null,
 
-  // Tasks
   tasks: [],
-  taskFilter: 'daily',  // 'daily' | 'weekly'
+  taskFilter: 'daily',
   showCompleted: false,
 
-  // Logs
   logs: [],
-
-  // Settings
   streak: 0,
 };
 
-// ─── Weekly Schedule (static template) ──────────────────────────────────────
 const WEEK_SCHEDULE = [
   { he: 'ראשון', day: 'Sun', type: 'chest',  icon: '💪', label: 'חזה' },
   { he: 'שני',   day: 'Mon', type: 'back',   icon: '🔙', label: 'גב' },
@@ -75,7 +67,6 @@ const DEFAULT_EXERCISES = {
   swim1: [], swim2: [], rest: [],
 };
 
-// ─── Collections ────────────────────────────────────────────────────────────
 let colWorkouts = null;
 let colBooks    = null;
 let colTasks    = null;
@@ -88,7 +79,6 @@ function initCollections() {
   colLogs     = getCollection('logs');
 }
 
-// ─── Toast ───────────────────────────────────────────────────────────────────
 let toastTimer = null;
 function showToast(msg, duration = 2500) {
   const el = document.getElementById('toast');
@@ -98,13 +88,31 @@ function showToast(msg, duration = 2500) {
   toastTimer = setTimeout(() => el.classList.remove('show'), duration);
 }
 
-// ─── Screen Navigation ───────────────────────────────────────────────────────
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
+
+function weekKeyNow() {
+  const today = new Date();
+  const weekStart = new Date(today);
+  weekStart.setDate(today.getDate() - today.getDay());
+  return weekStart.toISOString().split('T')[0];
+}
+
 function navigateTo(screenId) {
   state.currentScreen = screenId;
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(`screen-${screenId}`)?.classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n => {
-    n.classList.toggle('active', n.dataset.screen === screenId);
+    const isActive = n.dataset.screen === screenId;
+    n.classList.toggle('active', isActive);
+    if (isActive) n.setAttribute('aria-current', 'page');
+    else n.removeAttribute('aria-current');
   });
   renderScreen(screenId);
 }
@@ -119,7 +127,6 @@ function renderScreen(id) {
   }
 }
 
-// ─── Header Updater ──────────────────────────────────────────────────────────
 function updateHeader() {
   const today = new Date();
   const opts  = { weekday:'long', year:'numeric', month:'long', day:'numeric' };
@@ -127,15 +134,11 @@ function updateHeader() {
   document.getElementById('streak-count').textContent = `🔥 ${state.streak} שבועות ברצף!`;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// SCREEN 1 — HOME / DASHBOARD
-// ═══════════════════════════════════════════════════════════════════════════
 async function renderHome() {
   const dayIdx = new Date().getDay();
   const dayInfo = WEEK_SCHEDULE[dayIdx];
   const typeKey = dayInfo.type;
 
-  // Today's Workout
   const woCompEl = document.getElementById('today-workout-completion');
   const woNameEl = document.getElementById('today-workout-name');
   const woMetaEl = document.getElementById('today-workout-meta');
@@ -144,7 +147,6 @@ async function renderHome() {
   woNameEl.textContent = `${dayInfo.icon} ${dayInfo.label}`;
   woMetaEl.textContent = dayInfo.he;
 
-  // Compute completion from workoutData
   const exercises = DEFAULT_EXERCISES[typeKey] || [];
   const savedDay  = state.workoutData[dayIdx] || {};
   let totalSets = 0, doneSets = 0;
@@ -158,7 +160,6 @@ async function renderHome() {
   woCompEl.textContent   = `${pct}%`;
   woBarEl.style.width    = `${pct}%`;
 
-  // Active Book
   const bookCard = document.getElementById('home-book-card');
   const active   = state.books.find(b => !b.finished);
   if (active) {
@@ -175,7 +176,6 @@ async function renderHome() {
     bookCard.innerHTML = `<div class="empty-state"><div class="icon">📚</div><div class="msg">אין ספר פעיל</div></div>`;
   }
 
-  // Pending Tasks
   const taskSummaryEl = document.getElementById('home-tasks-summary');
   const pending = state.tasks.filter(t => t.category === 'daily' && !t.done);
   taskSummaryEl.innerHTML = pending.length
@@ -189,11 +189,7 @@ async function renderHome() {
     : `<div class="empty-state"><div class="icon">✅</div><div class="msg">כל המשימות הושלמו!</div></div>`;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// SCREEN 2 — WORKOUTS
-// ═══════════════════════════════════════════════════════════════════════════
 function renderWorkouts() {
-  // Day tabs
   const tabsEl = document.getElementById('day-tabs');
   tabsEl.innerHTML = WEEK_SCHEDULE.map((d, i) => `
     <button class="day-tab ${i === state.selectedDay ? 'active' : ''}"
@@ -214,12 +210,16 @@ function renderExercises() {
     listEl.innerHTML = `<div class="empty-state"><div class="icon">😴</div>
       <div class="msg">יום מנוחה!</div>
       <div class="sub">מנוחה היא חלק מהאימון 💪</div></div>`;
+    document.getElementById('workout-progress-label').textContent = '';
+    document.getElementById('workout-progress-bar').style.width = '0%';
     return;
   }
   if (typeKey === 'swim1' || typeKey === 'swim2') {
     listEl.innerHTML = `<div class="empty-state"><div class="icon">🏊</div>
       <div class="msg">${dayInfo.label}</div>
       <div class="sub">להנות ולשחות! 🌊</div></div>`;
+    document.getElementById('workout-progress-label').textContent = '';
+    document.getElementById('workout-progress-bar').style.width = '0%';
     return;
   }
 
@@ -228,10 +228,11 @@ function renderExercises() {
     listEl.innerHTML = `<div class="empty-state"><div class="icon">🏋️</div>
       <div class="msg">אין תרגילים עדיין</div>
       <div class="sub">הוסף תרגיל חדש</div></div>`;
+    document.getElementById('workout-progress-label').textContent = '0/0 • 0%';
+    document.getElementById('workout-progress-bar').style.width = '0%';
     return;
   }
 
-  // Count completion
   let totalSets = 0, doneSets = 0;
   exercises.forEach((ex, ei) => ex.sets.forEach((_, si) => {
     totalSets++;
@@ -247,8 +248,8 @@ function renderExercises() {
     return `
     <div class="exercise-item ${allDone ? 'completed' : ''}" id="ex-${ei}">
       <div class="exercise-header">
-        <div class="exercise-name">${ex.name}</div>
-        <div class="exercise-tag">${ex.tag}</div>
+        <div class="exercise-name">${escHtml(ex.name)}</div>
+        <div class="exercise-tag">${escHtml(ex.tag)}</div>
       </div>
       <div class="sets-row">
         ${ex.sets.map((s, si) => {
@@ -256,12 +257,12 @@ function renderExercises() {
           const label = s.weight ? `${s.reps} × ${s.weight}` : `${s.reps}`;
           return `<button class="set-chip ${done ? 'done' : ''}"
                     onclick="app.toggleSet(${state.selectedDay}, ${ei}, ${si})">
-                    ${done ? '✓ ' : ''}${label}
+                    ${done ? '✓ ' : ''}${escHtml(label)}
                   </button>`;
         }).join('')}
       </div>
       <div class="exercise-actions">
-        <button class="icon-btn" title="ערוך משקל" onclick="app.editExercise(${ei})">✏️</button>
+        <button class="icon-btn" title="ערוך" onclick="app.editExercise(${ei})">✏️</button>
         <button class="icon-btn danger" title="מחק תרגיל" onclick="app.deleteExercise(${ei})">🗑️</button>
       </div>
     </div>`;
@@ -272,6 +273,14 @@ window.app = window.app || {};
 window.app.selectDay = (i) => { state.selectedDay = i; renderWorkouts(); };
 
 window.app.toggleSet = (dayIdx, exIdx, setIdx) => {
+  const wk = weekKeyNow();
+  if (state.workoutData._weekKey && state.workoutData._weekKey !== wk) {
+    Object.keys(state.workoutData).forEach(k => {
+      if (k !== '_weekKey') state.workoutData[k] = {};
+    });
+  }
+  state.workoutData._weekKey = wk;
+
   if (!state.workoutData[dayIdx]) state.workoutData[dayIdx] = {};
   const key = `${exIdx}_${setIdx}`;
   state.workoutData[dayIdx][key] = !state.workoutData[dayIdx][key];
@@ -282,7 +291,7 @@ window.app.toggleSet = (dayIdx, exIdx, setIdx) => {
 
 window.app.editExercise = (exIdx) => {
   const dayType = WEEK_SCHEDULE[state.selectedDay].type;
-  const ex      = DEFAULT_EXERCISES[dayType][exIdx];
+  const ex      = DEFAULT_EXERCISES[dayType]?.[exIdx];
   if (!ex) return;
   openModal('edit-exercise-modal');
   document.getElementById('edit-ex-name').value   = ex.name;
@@ -294,7 +303,9 @@ window.app.deleteExercise = (exIdx) => {
   const dayType = WEEK_SCHEDULE[state.selectedDay].type;
   const ex      = DEFAULT_EXERCISES[dayType];
   if (!ex) return;
+  if (!confirm('למחוק את התרגיל?')) return;
   ex.splice(exIdx, 1);
+  saveCustomExercises();
   renderExercises();
   showToast('תרגיל נמחק');
 };
@@ -309,17 +320,39 @@ async function saveWorkoutData() {
   } catch (e) { console.warn('Could not save workout data:', e); }
 }
 
+async function saveCustomExercises() {
+  try {
+    const all = await colWorkouts.getAll();
+    const existing = all.find(d => d.type === 'custom_exercises');
+    const payload  = { type: 'custom_exercises', data: JSON.stringify(DEFAULT_EXERCISES) };
+    if (existing) await colWorkouts.update(existing.id, payload);
+    else           await colWorkouts.add(payload);
+  } catch (e) { console.warn('Could not save custom exercises:', e); }
+}
+
 async function loadWorkoutData() {
   try {
     const all = await colWorkouts.getAll();
-    const doc = all.find(d => d.type === 'workout_sets');
-    if (doc?.data) state.workoutData = JSON.parse(doc.data);
+    const setsDoc = all.find(d => d.type === 'workout_sets');
+    if (setsDoc?.data) {
+      state.workoutData = JSON.parse(setsDoc.data);
+      const wk = weekKeyNow();
+      if (state.workoutData._weekKey && state.workoutData._weekKey !== wk) {
+        Object.keys(state.workoutData).forEach(k => {
+          if (k !== '_weekKey') state.workoutData[k] = {};
+        });
+        state.workoutData._weekKey = wk;
+        saveWorkoutData();
+      }
+    }
+    const exDoc = all.find(d => d.type === 'custom_exercises');
+    if (exDoc?.data) {
+      const saved = JSON.parse(exDoc.data);
+      Object.keys(saved).forEach(key => { DEFAULT_EXERCISES[key] = saved[key]; });
+    }
   } catch (e) { console.warn('Could not load workout data:', e); }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// SCREEN 3 — BOOKS
-// ═══════════════════════════════════════════════════════════════════════════
 function renderBooks() {
   const active   = state.books.filter(b => !b.finished);
   const finished = state.books.filter(b => b.finished);
@@ -335,7 +368,7 @@ function renderBooks() {
         <div class="archive-item">
           <div class="archive-item-info">
             <div class="archive-item-title">${escHtml(b.title)}</div>
-            <div class="archive-item-meta">${b.totalPages} עמודים • ${b.finishedDate || '—'}</div>
+            <div class="archive-item-meta">${b.totalPages} עמודים • ${escHtml(b.finishedDate || '—')}</div>
           </div>
           <button class="icon-btn danger" onclick="app.deleteBook('${b.id}')">🗑️</button>
         </div>`).join('')
@@ -343,7 +376,7 @@ function renderBooks() {
 }
 
 function bookCard(b) {
-  const pct = Math.round((b.currentPage / b.totalPages) * 100);
+  const pct = Math.min(100, Math.round((b.currentPage / b.totalPages) * 100));
   return `
   <div class="book-card" id="book-${b.id}">
     <div class="card-header">
@@ -395,9 +428,11 @@ window.app.finishBook = async (id) => {
   b.finishedDate = new Date().toLocaleDateString('he-IL');
   await colBooks.update(id, { finished: true, finishedDate: b.finishedDate });
   renderBooks();
+  renderHome();
   showToast('🎉 כל הכבוד! סיימת את הספר!');
 };
 window.app.deleteBook = async (id) => {
+  if (!confirm('למחוק את הספר?')) return;
   state.books = state.books.filter(b => b.id !== id);
   await colBooks.remove(id);
   renderBooks();
@@ -405,9 +440,6 @@ window.app.deleteBook = async (id) => {
   showToast('ספר נמחק');
 };
 
-// ═══════════════════════════════════════════════════════════════════════════
-// SCREEN 4 — TASKS
-// ═══════════════════════════════════════════════════════════════════════════
 function renderTasks() {
   const filtered = state.tasks.filter(t => {
     const catMatch = t.category === state.taskFilter;
@@ -431,15 +463,11 @@ function renderTasks() {
         <div class="msg">אין משימות ${state.showCompleted?'':'פתוחות'}</div>
         <div class="sub">הוסף משימה חדשה למטה ✨</div></div>`;
 
-  // Tab active state
   document.getElementById('tab-daily').classList.toggle('active', state.taskFilter === 'daily');
   document.getElementById('tab-weekly').classList.toggle('active', state.taskFilter === 'weekly');
 
-  // Completed count
   const cnt = state.tasks.filter(t => t.category === state.taskFilter && t.done).length;
-  document.getElementById('completed-count').textContent = cnt
-    ? `${cnt} משימות הושלמו`
-    : '';
+  document.getElementById('completed-count').textContent = cnt ? `${cnt} משימות הושלמו` : '';
 }
 
 window.app.toggleTask = async (id) => {
@@ -451,29 +479,33 @@ window.app.toggleTask = async (id) => {
   renderHome();
 };
 window.app.editTask = async (id, text) => {
-  if (!text) return;
   const t = state.tasks.find(x => x.id === id);
-  if (!t || t.text === text) return;
+  if (!t) return;
+  if (!text) {
+    const el = document.querySelector(`#task-${id} .task-text`);
+    if (el) el.textContent = t.text;
+    return;
+  }
+  if (t.text === text) return;
   t.text = text;
   await colTasks.update(id, { text });
 };
 window.app.deleteTask = async (id) => {
+  if (!confirm('למחוק את המשימה?')) return;
   state.tasks = state.tasks.filter(t => t.id !== id);
   await colTasks.remove(id);
   renderTasks();
+  renderHome();
   showToast('משימה נמחקה');
 };
 
-// ═══════════════════════════════════════════════════════════════════════════
-// SCREEN 5 — LOGS & SETTINGS
-// ═══════════════════════════════════════════════════════════════════════════
 function renderLogs() {
   const historyEl = document.getElementById('log-history');
   const sorted    = [...state.logs].sort((a, b) => (b._createdAt || 0) - (a._createdAt || 0));
 
   historyEl.innerHTML = sorted.slice(0, 30).map(log => `
     <div class="log-history-item">
-      <div class="log-history-date">${log.date || '—'}</div>
+      <div class="log-history-date">${escHtml(log.date || '—')}</div>
       <div class="log-history-content">
         ${log.linux  ? `<div>🐧 <strong>Linux:</strong> ${escHtml(log.linux)}</div>`  : ''}
         ${log.market ? `<div>📈 <strong>שוק:</strong> ${escHtml(log.market)}</div>` : ''}
@@ -483,7 +515,6 @@ function renderLogs() {
     `<div class="empty-state" style="padding:20px"><div class="icon">📓</div>
       <div class="msg">אין רשומות עדיין</div></div>`;
 
-  // User info
   const u = state.user;
   document.getElementById('settings-user-name').textContent  = u?.displayName || u?.email || 'אורח';
   document.getElementById('settings-user-email').textContent = u?.email || '—';
@@ -491,7 +522,6 @@ function renderLogs() {
   document.getElementById('settings-streak-val').textContent = `${state.streak} שבועות`;
 }
 
-// ─── Save Today's Log ────────────────────────────────────────────────────────
 window.app.saveLog = async () => {
   const linux  = document.getElementById('log-linux').value.trim();
   const market = document.getElementById('log-market').value.trim();
@@ -512,7 +542,6 @@ window.app.saveLog = async () => {
   showToast('📓 יומן נשמר!');
 };
 
-// ─── Streak ──────────────────────────────────────────────────────────────────
 window.app.syncStreak = async () => {
   state.streak++;
   await settingsStore.set({ streak: state.streak });
@@ -521,7 +550,6 @@ window.app.syncStreak = async () => {
   showToast(`🔥 רצף: ${state.streak} שבועות!`);
 };
 
-// ─── Auth Helpers ────────────────────────────────────────────────────────────
 function setAuthBtnLoading(btnId, loading, originalText) {
   const btn = document.getElementById(btnId);
   if (!btn) return;
@@ -544,14 +572,14 @@ function authError(e) {
   return AUTH_ERRORS[code] || e.message || 'שגיאה לא ידועה';
 }
 
-// ─── Auth ────────────────────────────────────────────────────────────────────
 window.app.authLogin = async () => {
   const email = document.getElementById('auth-email').value.trim();
   const pass  = document.getElementById('auth-pass').value;
   if (!email || !pass) { showToast('מלא אימייל וסיסמה'); return; }
   setAuthBtnLoading('auth-submit-btn', true, 'כניסה');
   try {
-    await signIn(email, pass);
+    const user = await signIn(email, pass);
+    if (user) await onUserSignedIn(user);
   } catch (e) {
     console.error('Login error:', e);
     showToast(authError(e));
@@ -564,7 +592,8 @@ window.app.authRegister = async () => {
   if (!email || !pass) { showToast('מלא אימייל וסיסמה'); return; }
   setAuthBtnLoading('auth-submit-btn', true, 'הרשמה');
   try {
-    await register(email, pass);
+    const user = await register(email, pass);
+    if (user) await onUserSignedIn(user);
   } catch (e) {
     console.error('Register error:', e);
     showToast(authError(e));
@@ -578,10 +607,8 @@ window.app.authGoogle = async () => {
   try {
     const user = await signInGoogle();
     if (user) {
-      // Popup or mock succeeded — navigate into the app
       await onUserSignedIn(user);
     }
-    // If user is null: redirect is happening, page is navigating away
   } catch (e) {
     console.error('Google auth error:', e);
     showToast('Google: ' + authError(e));
@@ -590,7 +617,6 @@ window.app.authGoogle = async () => {
 };
 window.app.authDemo = async () => {
   signInDemo();
-  // onAuthStateChanged won't fire for demo — call bootstrap callback manually
   await onUserSignedIn({
     uid: 'demo_user_local', email: 'demo@local', displayName: '👤 Demo User'
   });
@@ -599,27 +625,25 @@ window.app.logOut = async () => {
   await logOut();
   state.user = null;
   state.books = []; state.tasks = []; state.logs = []; state.streak = 0;
+  state.workoutData = {};
   showAuthScreen();
 };
 
-// ─── Modals ──────────────────────────────────────────────────────────────────
 function openModal(id)  { document.getElementById(id)?.classList.add('open'); }
 function closeModal(id) { document.getElementById(id)?.classList.remove('open'); }
 window.app.openModal  = openModal;
 window.app.closeModal = closeModal;
 
-// Close modal when clicking outside the sheet
 document.addEventListener('click', (e) => {
   if (e.target.classList.contains('modal-overlay')) {
     e.target.classList.remove('open');
   }
 });
 
-// Add Book submit
 window.app.submitAddBook = async () => {
   const title = document.getElementById('new-book-title').value.trim();
   const pages = parseInt(document.getElementById('new-book-pages').value) || 0;
-  if (!title || pages < 1) { showToast('מלא שם ומספר עמודים'); return; }
+  if (!title || pages < 1) { showToast('מלא שם ומספר עמודים תקין'); return; }
   const doc = await colBooks.add({ title, totalPages: pages, currentPage: 0, finished: false });
   state.books.push(doc);
   closeModal('add-book-modal');
@@ -630,7 +654,6 @@ window.app.submitAddBook = async () => {
   showToast('📚 ספר חדש נוסף!');
 };
 
-// Add Task submit
 window.app.submitAddTask = async () => {
   const text = document.getElementById('new-task-text').value.trim();
   if (!text) { showToast('הכנס טקסט למשימה'); return; }
@@ -643,7 +666,6 @@ window.app.submitAddTask = async () => {
   showToast('משימה חדשה נוספה!');
 };
 
-// Edit Exercise submit
 window.app.submitEditExercise = () => {
   const idx  = parseInt(document.getElementById('edit-ex-index').value);
   const name = document.getElementById('edit-ex-name').value.trim();
@@ -652,12 +674,12 @@ window.app.submitEditExercise = () => {
   if (!name || !DEFAULT_EXERCISES[dayType]?.[idx]) return;
   DEFAULT_EXERCISES[dayType][idx].name = name;
   DEFAULT_EXERCISES[dayType][idx].tag  = tag;
+  saveCustomExercises();
   closeModal('edit-exercise-modal');
   renderExercises();
   showToast('תרגיל עודכן');
 };
 
-// Add Custom Exercise
 window.app.submitAddExercise = () => {
   const name = document.getElementById('new-ex-name').value.trim();
   const sets = parseInt(document.getElementById('new-ex-sets').value) || 3;
@@ -672,15 +694,16 @@ window.app.submitAddExercise = () => {
     tag: `${sets}×${reps}${weight ? ' '+weight : ''}`,
   };
   DEFAULT_EXERCISES[dayType].push(newEx);
+  saveCustomExercises();
   closeModal('add-exercise-modal');
   document.getElementById('new-ex-name').value = '';
+  document.getElementById('new-ex-sets').value = '';
   document.getElementById('new-ex-reps').value = '';
   document.getElementById('new-ex-weight').value = '';
   renderExercises();
   showToast('תרגיל חדש נוסף!');
 };
 
-// Task filter tabs
 window.app.setTaskFilter = (f) => {
   state.taskFilter = f;
   renderTasks();
@@ -690,7 +713,6 @@ window.app.toggleShowCompleted = (el) => {
   renderTasks();
 };
 
-// ─── Auth Screen visibility ──────────────────────────────────────────────────
 function showAuthScreen()  {
   document.getElementById('auth-screen').classList.remove('hidden');
   document.getElementById('app').style.visibility = 'hidden';
@@ -700,7 +722,6 @@ function hideAuthScreen() {
   document.getElementById('app').style.visibility = 'visible';
 }
 
-// Auth tab switching
 let authMode = 'login';
 window.app.switchAuthMode = () => {
   authMode = authMode === 'login' ? 'register' : 'login';
@@ -714,16 +735,6 @@ window.app.switchAuthMode = () => {
     : window.app.authRegister;
 };
 
-// ─── Helper ──────────────────────────────────────────────────────────────────
-function escHtml(str) {
-  return String(str)
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;');
-}
-
-// ─── User sign-in handler (shared by all auth paths) ───────────────────────
 async function onUserSignedIn(user) {
   state.user = user;
   initCollections();
@@ -749,17 +760,13 @@ async function onUserSignedIn(user) {
   navigateTo('home');
 }
 
-// ─── Bootstrap ───────────────────────────────────────────────────────────────
 async function bootstrap() {
-  // Register Service Worker
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(console.warn);
   }
 
-  // Show loading state on auth screen
   showAuthScreen();
 
-  // Step 1: Check if returning from a Google redirect sign-in
   try {
     const redirectUser = await checkRedirectResult();
     if (redirectUser) {
@@ -770,7 +777,6 @@ async function bootstrap() {
     console.warn('Redirect check failed:', e);
   }
 
-  // Step 2: Set up ongoing auth state listener
   await initAuth(async (user) => {
     if (!user) {
       showAuthScreen();
@@ -780,7 +786,6 @@ async function bootstrap() {
   });
 }
 
-// ─── Bottom Nav Wiring ───────────────────────────────────────────────────────
 document.querySelectorAll('.nav-item').forEach(btn => {
   btn.addEventListener('click', () => navigateTo(btn.dataset.screen));
 });
