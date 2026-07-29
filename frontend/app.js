@@ -35,36 +35,13 @@ let WEEK_SCHEDULE = [
 ];
 
 const DEFAULT_EXERCISES = {
-  chest: [
-    { name: 'Dips',          sets: [{ reps:12 },{ reps:12 },{ reps:12 }], tag: '3×12' },
-    { name: 'Bench Press',   sets: [{ reps:12,weight:'Warmup' },{ reps:22,weight:'22.5kg' },{ reps:22,weight:'22.5kg' },{ reps:22,weight:'22.5kg' }], tag: 'Warmup+3×22.5kg' },
-    { name: 'Incline Smith', sets: [{ reps:10,weight:'17.5kg' },{ reps:10,weight:'17.5kg' },{ reps:10,weight:'17.5kg' },{ reps:10,weight:'17.5kg' }], tag: '4×17.5kg' },
-    { name: 'Pec Deck',      sets: [{ reps:12,weight:'60kg' },{ reps:12,weight:'60kg' },{ reps:12,weight:'60kg' }], tag: '3×60kg' },
-    { name: 'Push-ups',      sets: [{ reps:'Burnout' },{ reps:'Burnout' }], tag: '2×Burnout' },
-  ],
-  back: [
-    { name: 'Pull-ups',      sets: [{ reps:10 },{ reps:10 },{ reps:10 }], tag: '3×10' },
-    { name: 'Seated Row',    sets: [{ reps:12,weight:'50kg' },{ reps:12,weight:'50kg' },{ reps:12,weight:'50kg' }], tag: '3×50kg' },
-    { name: 'Lat Pulldown',  sets: [{ reps:12,weight:'50kg' },{ reps:12,weight:'50kg' },{ reps:12,weight:'50kg' }], tag: '3×50kg' },
-  ],
-  legs: [
-    { name: 'Adductor/Abductor', sets: [{ reps:12 },{ reps:12 },{ reps:12 }], tag: '3×12' },
-    { name: 'Hip Thrust',        sets: [{ reps:10 },{ reps:10 },{ reps:10 }], tag: '3×10' },
-    { name: 'Standing Leg Curl', sets: [{ reps:10 },{ reps:10 },{ reps:10 }], tag: '3×10' },
-    { name: 'Leg Press',         sets: [{ reps:10 },{ reps:10 },{ reps:10 }], tag: '3×10' },
-    { name: 'Calf Raises',       sets: [{ reps:15 },{ reps:15 },{ reps:15 }], tag: '3×15' },
-  ],
-  arms: [
-    { name: 'DB Press / Lateral Raise Superset', sets: [{ reps:8 },{ reps:8 },{ reps:8 }], tag: '3×8 Superset' },
-    { name: 'Preacher Curl',    sets: [{ reps:8 },{ reps:8 },{ reps:8 },{ reps:8 }], tag: '4×8' },
-    { name: 'Hammer Curl',      sets: [{ reps:8 },{ reps:8 },{ reps:8 },{ reps:8 }], tag: '4×8' },
-    { name: 'Cable Pushdown',   sets: [{ reps:12 },{ reps:12 },{ reps:12 }], tag: '3×12' },
-    { name: 'Overhead Triceps', sets: [{ reps:12 },{ reps:12 },{ reps:12 }], tag: '3×12' },
-    { name: 'Ab Roller',        sets: [{ reps:10 },{ reps:10 },{ reps:10 }], tag: '3×10' },
-    { name: 'Hanging Leg Raise Superset', sets: [{ reps:'Failure' },{ reps:'Failure' },{ reps:'Failure' }], tag: '3×Failure' },
-    { name: 'Machine Crunch',   sets: [{ reps:15 },{ reps:15 },{ reps:15 }], tag: '3 sets' },
-  ],
-  swim1: [], swim2: [], rest: [],
+  chest: [],
+  back: [],
+  legs: [],
+  arms: [],
+  swim1: [],
+  swim2: [],
+  rest: [],
 };
 
 const ICON = {
@@ -188,21 +165,28 @@ async function renderHome() {
   const woMetaEl = document.getElementById('today-workout-meta');
   const woBarEl  = document.getElementById('today-workout-bar');
 
-  woNameEl.textContent = dayInfo.label;
-  woMetaEl.textContent = dayInfo.he;
+  if (!state.hasCustomPlan) {
+    woNameEl.textContent = 'טרם הוגדרו אימונים';
+    woMetaEl.textContent = 'השתמש בסוכן ה-AI להגדרת המערכת';
+    woCompEl.textContent = '0%';
+    woBarEl.style.width  = '0%';
+  } else {
+    woNameEl.textContent = dayInfo.label;
+    woMetaEl.textContent = dayInfo.he;
 
-  const exercises = DEFAULT_EXERCISES[typeKey] || [];
-  const savedDay  = state.workoutData[dayIdx] || {};
-  let totalSets = 0, doneSets = 0;
-  exercises.forEach((ex, ei) => {
-    ex.sets.forEach((_, si) => {
-      totalSets++;
-      if (savedDay[`${ei}_${si}`]) doneSets++;
+    const exercises = DEFAULT_EXERCISES[typeKey] || [];
+    const savedDay  = state.workoutData[dayIdx] || {};
+    let totalSets = 0, doneSets = 0;
+    exercises.forEach((ex, ei) => {
+      ex.sets.forEach((_, si) => {
+        totalSets++;
+        if (savedDay[`${ei}_${si}`]) doneSets++;
+      });
     });
-  });
-  const pct = totalSets > 0 ? Math.round((doneSets / totalSets) * 100) : 0;
-  woCompEl.textContent = `${pct}%`;
-  woBarEl.style.width  = `${pct}%`;
+    const pct = totalSets > 0 ? Math.round((doneSets / totalSets) * 100) : 0;
+    woCompEl.textContent = `${pct}%`;
+    woBarEl.style.width  = `${pct}%`;
+  }
 
   const bookCard = document.getElementById('home-book-card');
   const active   = state.books.find(b => !b.finished);
@@ -718,13 +702,51 @@ window.app.openAIBuilder = async () => {
   });
 };
 
-window.app.openOnboardingAgent = async () => {
+let selectedDomainsSet = new Set(['workouts', 'books', 'tasks']);
+
+window.app.toggleDomainChip = (domainKey) => {
+  if (selectedDomainsSet.has(domainKey)) {
+    selectedDomainsSet.delete(domainKey);
+  } else {
+    selectedDomainsSet.add(domainKey);
+  }
+  const chip = document.getElementById(`domain-chip-${domainKey}`);
+  if (chip) chip.classList.toggle('selected', selectedDomainsSet.has(domainKey));
+};
+
+window.app.addCustomDomain = () => {
+  const inp = document.getElementById('custom-domain-input');
+  if (!inp) return;
+  const val = inp.value.trim();
+  if (!val) return;
+  const domainKey = `custom:${val}`;
+  selectedDomainsSet.add(domainKey);
+  inp.value = '';
+
+  const list = document.getElementById('domain-checklist-container');
+  if (list) {
+    const chip = document.createElement('div');
+    chip.id = `domain-chip-${domainKey}`;
+    chip.className = 'domain-chip selected';
+    chip.onclick = () => window.app.toggleDomainChip(domainKey);
+    chip.innerHTML = `<span>✨ ${escHtml(val)}</span><span class="domain-chip-checkbox">✓</span>`;
+    list.appendChild(chip);
+  }
+};
+
+window.app.startCustomizedInterview = async () => {
+  const domainsArr = Array.from(selectedDomainsSet);
+  if (domainsArr.length === 0) {
+    showToast('בחר לפחות תחום אחד להתחלה');
+    return;
+  }
+
   await startAISession({
     title: 'הגדרת המערכת',
-    createSession: createOnboardingAgent,
+    createSession: () => createOnboardingAgent(domainsArr),
     onComplete: async (res) => {
       await applyOnboarding(res.data);
-      aiAppendBubble('ai', 'סיימנו! כל הממידע נכנס למערכת.');
+      aiAppendBubble('ai', 'סיימנו! כל המידע נכנס למערכת.');
       setTimeout(() => {
         closeModal('ai-modal');
         aiSession = null;
@@ -733,6 +755,48 @@ window.app.openOnboardingAgent = async () => {
       }, 1600);
     },
   });
+};
+
+window.app.openOnboardingAgent = async () => {
+  const titleEl = document.getElementById('ai-modal-title');
+  if (titleEl) titleEl.textContent = 'הגדרת המערכת';
+
+  openModal('ai-modal');
+  const box = document.getElementById('ai-chat-messages');
+  if (!box) return;
+
+  selectedDomainsSet = new Set(['workouts', 'books', 'tasks']);
+
+  box.innerHTML = `
+    <div class="ai-bubble ai">
+      היי, ברוך הבא ל-Personal Command Center! כאן תוכל לתעד את חיי היום יום שלך, ולעקוב ולהיות עירני להתקדמות שלך.<br><br>
+      לפני שנתחיל, אילו תחומי עניין תרצה לתעד במערכת?
+    </div>
+
+    <div id="domain-checklist-container" class="domain-checklist">
+      <div id="domain-chip-workouts" class="domain-chip selected" onclick="app.toggleDomainChip('workouts')">
+        <span>🏋️ אימונים וכושר</span>
+        <span class="domain-chip-checkbox">✓</span>
+      </div>
+      <div id="domain-chip-books" class="domain-chip selected" onclick="app.toggleDomainChip('books')">
+        <span>📚 קריאת ספרים</span>
+        <span class="domain-chip-checkbox">✓</span>
+      </div>
+      <div id="domain-chip-tasks" class="domain-chip selected" onclick="app.toggleDomainChip('tasks')">
+        <span>📋 משימות והרגלים</span>
+        <span class="domain-chip-checkbox">✓</span>
+      </div>
+    </div>
+
+    <div class="custom-domain-row">
+      <input id="custom-domain-input" class="input-field" type="text" placeholder="תחום מותאם אישית (למשל: מדיטציה, לימודים)..." onkeydown="if(event.key==='Enter') app.addCustomDomain()" />
+      <button class="btn btn-ghost" type="button" onclick="app.addCustomDomain()">+ הוסף</button>
+    </div>
+
+    <button class="btn btn-primary btn-full mt-2" onclick="app.startCustomizedInterview()">התחל ראיון מותאם אישית</button>
+  `;
+
+  aiSetInputEnabled(false);
 };
 
 window.app.aiSend = async () => {

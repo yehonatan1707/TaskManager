@@ -1,6 +1,5 @@
 /**
- * ai.js — Conversational AI & Fail-Safe Onboarding Agent
- * Multi-turn Gemini REST API + Intelligent Context-Aware Fallback Engine
+ * ai.js — Deep Template-Filling Conversational AI Agent & Adaptive Interview Engine
  */
 
 import { FIREBASE_CONFIG } from './firebase.js';
@@ -17,7 +16,6 @@ function safeJson(raw, fallback) {
   }
 }
 
-/* ===== Real Gemini REST Multi-Turn Chat ===== */
 async function callGeminiRest(contents, systemInstruction) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
   const payload = {
@@ -45,10 +43,12 @@ async function callGeminiRest(contents, systemInstruction) {
   return rawText;
 }
 
-/* ===== Intelligent Context-Aware Conversational Engine (Fallback) ===== */
-class IntelligentOnboardEngine {
-  constructor() {
-    this.stage = 'workouts'; // 'workouts' | 'books' | 'tasks' | 'custom' | 'done'
+/* ===== Slot-Filling Conversational Fallback Engine ===== */
+class DeepSlotFillingEngine {
+  constructor(selectedDomains = ['workouts', 'books', 'tasks']) {
+    this.selectedDomains = selectedDomains; // e.g. ['workouts', 'books', 'tasks', 'custom:מדיטציה']
+    this.domainIndex = 0;
+    this.slotStep = 0;
     this.data = {
       workoutDays: [],
       books: [],
@@ -56,56 +56,73 @@ class IntelligentOnboardEngine {
     };
   }
 
+  currentDomain() {
+    return this.selectedDomains[this.domainIndex] || 'done';
+  }
+
   start() {
+    const firstDomain = this.currentDomain();
+    if (firstDomain === 'workouts') {
+      return {
+        reply: 'היי! ברוך הבא ל-Personal Command Center, כאן תוכל לתעד את חיי היום יום שלך ולעקוב אחר התקדמותך. נתחיל באימונים: כמה ימים בשבוע אתה מתאמן ואיזה פיצול (אילו שרירים בכל יום)?',
+        complete: false,
+        data: this.data
+      };
+    }
+    if (firstDomain === 'books') {
+      return {
+        reply: 'היי! ברוך הבא ל-Personal Command Center. נתחיל בספרים: האם אתה קורא ספר כרגע? (כתוב שם ספר, מספר עמודים, ועמוד נוכחי, או "דילוג")',
+        complete: false,
+        data: this.data
+      };
+    }
+    if (firstDomain === 'tasks') {
+      return {
+        reply: 'היי! ברוך הבא ל-Personal Command Center. נתחיל במשימות והרגלים: אילו משימות או הרגלים יומיים/שבועיים חשוב לך להשלים?',
+        complete: false,
+        data: this.data
+      };
+    }
     return {
-      reply: 'היי! בוא נגדיר לך את המערכת. נתחיל באימונים: כמה ימים בשבוע אתה מתאמן, ואיזה סוג אימון אתה עושה בכל יום (למשל: חזה, גב, רגליים, מנוחה)?',
+      reply: 'היי! ברוך הבא ל-Personal Command Center. ספר לי אילו תחומים תרצה לתעד במערכת?',
       complete: false,
       data: this.data
     };
   }
 
   send(userText) {
-    const text = String(userText || '').trim().toLowerCase();
+    const input = String(userText || '').trim();
+    const lower = input.toLowerCase();
 
-    // Handle general greetings without jumping stage
-    if (/^(היי|שלום|היוש|אהלן|הייי|hi|hello|hey)$/i.test(text)) {
-      if (this.stage === 'workouts') {
-        return {
-          reply: 'היי! שמח להכיר. בוא נתחיל באימונים — כמה ימים בשבוע אתה מתאמן, ומה הפיצול שלך (למשל: חזה, גב, רגליים, מנוחה)?',
-          complete: false,
-          data: this.data
-        };
-      }
-      if (this.stage === 'books') {
-        return {
-          reply: 'היי! אנחנו בשלב הספרים — האם אתה קורא ספר כרגע? (כתוב שם ספר, מספר עמודים, ועמוד נוכחי, או "דילוג")',
-          complete: false,
-          data: this.data
-        };
-      }
-    }
-
-    // Handle user saying "wait", "didn't talk about X", "go back"
-    if (text.includes('רגע') || text.includes('לא דיברנו') || text.includes('חזור') || text.includes('חכה')) {
+    // Handle greetings
+    if (/^(היי|שלום|היוש|אהלן|hi|hello|hey)$/i.test(lower)) {
       return {
-        reply: 'סליחה! בוא נמשיך. ספר לי בבקשה על האימונים שלך: כמה ימים בשבוע אתה מתאמן ואיזה תרגילים או אזורים אתה עושה?',
+        reply: `היי! שמח להכיר. אנחנו בשלב ${this.getDomainName(this.currentDomain())} — בוא נמלא את הפרטים: ${this.getDomainQuestion(this.currentDomain())}`,
         complete: false,
         data: this.data
       };
     }
 
-    // STAGE 1: WORKOUTS
-    if (this.stage === 'workouts') {
-      if (text.includes('לא מתאמן') || text.includes('אין אימון') || text.includes('ללא') || text.includes('דילוג')) {
-        this.stage = 'books';
+    const domain = this.currentDomain();
+
+    // WORKOUTS DOMAIN
+    if (domain === 'workouts') {
+      if (lower.includes('דילוג') || lower.includes('לא מתאמן') || lower.includes('אין')) {
+        this.domainIndex++;
+        return this.advanceToNextDomain('מדלגים על אימונים.');
+      }
+
+      // Slot 0: Need split / exercise details if user only gave a number (e.g. "6 ימים")
+      if (this.slotStep === 0 && (/^\d+$/.test(input) || /^\d+\s*ימים/i.test(input) || lower.includes('פעמים'))) {
+        this.slotStep = 1;
         return {
-          reply: 'הבנתי, מדלגים על אימונים. עוברים לספרים — האם אתה קורא ספר כרגע? (רושמים שם ספר, מספר עמודים, ועמוד נוכחי)',
+          reply: `מעולה, ${input}! אילו תרגילים או אזורי גוף תרצה לעשות בכל אחד מהימים (למשל: יום 1 חזה, יום 2 גב...)?`,
           complete: false,
           data: this.data
         };
       }
 
-      // Populate default workout split based on user input
+      // Populate workouts
       this.data.workoutDays = [
         { dayIndex: 0, label: 'חזה', isRest: false, exercises: [{ name: 'Bench Press', sets: 3, reps: '10', weight: '20kg' }, { name: 'Dips', sets: 3, reps: '12', weight: '' }] },
         { dayIndex: 1, label: 'גב', isRest: false, exercises: [{ name: 'Pull-ups', sets: 3, reps: '10', weight: '' }, { name: 'Seated Row', sets: 3, reps: '12', weight: '40kg' }] },
@@ -116,67 +133,98 @@ class IntelligentOnboardEngine {
         { dayIndex: 6, label: 'מנוחה', isRest: true, exercises: [] }
       ];
 
-      this.stage = 'books';
-      return {
-        reply: 'מעולה! תוכנית האימונים נרשמה. עכשיו לגבי ספרים — האם אתה קורא ספר כרגע? (שם הספר, מספר עמודים, ועמוד נוכחי, או "דילוג")',
-        complete: false,
-        data: this.data
-      };
+      this.domainIndex++;
+      this.slotStep = 0;
+      return this.advanceToNextDomain('תוכנית האימונים נרשמה בהצלחה!');
     }
 
-    // STAGE 2: BOOKS
-    if (this.stage === 'books') {
-      if (!text.includes('דילוג') && !text.includes('לא קורא') && !text.includes('אין')) {
-        const parts = text.split(/[,–-]/);
-        const title = parts[0]?.trim() || text;
+    // BOOKS DOMAIN
+    if (domain === 'books') {
+      if (!lower.includes('דילוג') && !lower.includes('לא קורא') && !lower.includes('אין')) {
+        const parts = input.split(/[,–-]/);
+        const title = parts[0]?.trim() || input;
         const totalPages = parseInt(parts[1]) || 300;
         const currentPage = parseInt(parts[2]) || 1;
         this.data.books.push({ title, totalPages, currentPage });
       }
-
-      this.stage = 'tasks';
-      return {
-        reply: 'מצוין! נשמר. עכשיו משימות והרגלים — אילו משימות יומיות או שבועיות חשוב לך להשלים ביום-יום (למשל: לשתות 3 ליטר מים, לקום ב-6)?',
-        complete: false,
-        data: this.data
-      };
+      this.domainIndex++;
+      return this.advanceToNextDomain('הספר נרשם במערכת!');
     }
 
-    // STAGE 3: TASKS
-    if (this.stage === 'tasks') {
-      if (!text.includes('דילוג') && !text.includes('אין') && !text.includes('לא')) {
-        this.data.tasks.push({ text: userText, category: 'daily' });
+    // TASKS DOMAIN
+    if (domain === 'tasks') {
+      if (!lower.includes('דילוג') && !lower.includes('אין')) {
+        this.data.tasks.push({ text: input, category: 'daily' });
       }
-
-      this.stage = 'custom';
-      return {
-        reply: 'מגניב! האם יש עוד תחום בחיים שתרצה לתעד (למשל מדיטציה, לימודים, כסף)? אם לא, ענה "זהו".',
-        complete: false,
-        data: this.data
-      };
+      this.domainIndex++;
+      return this.advanceToNextDomain('המשימות נשמרו!');
     }
 
-    // STAGE 4: CUSTOM & DONE
-    if (!text.includes('זהו') && !text.includes('דילוג') && !text.includes('לא') && !text.includes('אין')) {
-      this.data.tasks.push({ text: userText, category: 'weekly' });
+    // CUSTOM DOMAIN (e.g., custom:מדיטציה)
+    if (domain.startsWith('custom:')) {
+      const customName = domain.replace('custom:', '');
+      if (!lower.includes('דילוג') && !lower.includes('אין')) {
+        this.data.tasks.push({ text: `${customName}: ${input}`, category: 'daily' });
+      }
+      this.domainIndex++;
+      return this.advanceToNextDomain(`תחום ${customName} התווסף למערכת!`);
     }
 
-    this.stage = 'done';
+    // ALL DONE
     return {
-      reply: 'סיימנו! כל המידע עובד והוכנס בהצלחה ללוח הבקרה שלך.',
+      reply: 'סיימנו! כל תחומי העניין שבחרת עובדו והוכנסו במלאות ללוח הבקרה שלך.',
       complete: true,
       data: this.data
     };
   }
+
+  advanceToNextDomain(prefixMsg) {
+    const next = this.currentDomain();
+    if (next === 'done') {
+      return {
+        reply: `${prefixMsg} סיימנו! כל המידע הוכנס בהצלחה למערכת.`,
+        complete: true,
+        data: this.data
+      };
+    }
+    return {
+      reply: `${prefixMsg} עכשיו לגבי ${this.getDomainName(next)}: ${this.getDomainQuestion(next)}`,
+      complete: false,
+      data: this.data
+    };
+  }
+
+  getDomainName(d) {
+    if (d === 'workouts') return 'אימונים וכושר';
+    if (d === 'books') return 'ספרים';
+    if (d === 'tasks') return 'משימות והרגלים';
+    if (d.startsWith('custom:')) return d.replace('custom:', '');
+    return 'התחום הבא';
+  }
+
+  getDomainQuestion(d) {
+    if (d === 'workouts') return 'כמה ימים בשבוע אתה מתאמן ואיזה פיצול/תרגילים תרצה בכל יום?';
+    if (d === 'books') return 'האם אתה קורא ספר כרגע? (שם הספר, מספר עמודים, ועמוד נוכחי, או "דילוג")';
+    if (d === 'tasks') return 'אילו משימות או הרגלים יומיים/שבועיים חשוב לך להשלים?';
+    if (d.startsWith('custom:')) return `איך תרצה לתעד ולעקוב אחר ${d.replace('custom:', '')}?`;
+    return 'ספר לי מה עוד תרצה לתעד במערכת?';
+  }
 }
 
-/* ===== Onboarding Agent ===== */
-const ONBOARDING_SYSTEM = `אתה סוכן קליטה (onboarding) של אפליקציית "מרכז שליטה אישי". נהל שיחה טבעית, חכמה וידידותית בעברית.
+/* ===== Onboarding Agent Creator with Selected Domains Support ===== */
+export async function createOnboardingAgent(selectedDomains = ['workouts', 'books', 'tasks']) {
+  const contents = [];
+  const slotEngine = new DeepSlotFillingEngine(selectedDomains);
 
-כללים חשובים:
-1. אם המשתמש רק אומר "היי", "שלום" או מגיב קצר — ברך אותו בחזרה ושאל על התחום הנוכחי. אל תתקדם שלב!
-2. אם המשתמש אומר "רגע לא דיברנו" או רוצה לתקן — הקשב לו וענה ספציפית על התחום שהוא ציין.
-3. עבור לפי הסדר: אימונים -> ספרים -> משימות והרגלים -> תחומים נוספים.
+  const ONBOARDING_SYSTEM = `אתה סוכן קליטה (onboarding) של אפליקציית "Personal Command Center".
+נהל ראיון עומק מותאם אישית למשתמש בעברית.
+
+תחומי העניין שהמשתמש בחר לתעד: ${selectedDomains.join(', ')}.
+
+חוקים קשיחים לראיון עומק (Slot-Filling):
+1. אל תוותר על חצאי תשובות! אם המשתמש נתן תשובה חלקית (למשל ציין "6 ימים" באימונים אבל לא ציין אילו תרגילים/שרירים) — שאל שאלת המשך ממוקדת כדי להוציא ממנו את כל הפרטים.
+2. אל תעבור לתחום הבא עד שלא מילאת את הפרטים הנדרשים לתחום הנוכחי או שהמשתמש ביקש במפורש "דילוג".
+3. אם המשתמש רק אומר "היי", "שלום" או מגיב קצר — ענה בנחמדות ושאל על התחום הנוכחי.
 4. החזר JSON בלבד במבנה:
 {
   "reply": "טקסט התגובה בעברית",
@@ -189,26 +237,22 @@ const ONBOARDING_SYSTEM = `אתה סוכן קליטה (onboarding) של אפלי
 }
 אל תשתמש באימוג'ים.`;
 
-export async function createOnboardingAgent() {
-  const contents = [];
-  const intelligentEngine = new IntelligentOnboardEngine();
-
   return {
     async start() {
       try {
-        const initialPrompt = 'משתמש חדש נכנס. ברך אותו קצר בעברית והתחל בשאלה ראשונה על אימונים (כמה ימים בשבוע מתאמן ואיזה פיצול).';
+        const initialPrompt = `התחל את ראיון הקליטה בעברית. פתח ב: "היי, ברוך הבא ל-Personal Command Center, כאן תוכל לתעד את חיי היום יום שלך ולעקוב אחר התקדמותך." והתחל בשאלה הראשונה על התחום: ${selectedDomains[0]}.`;
         contents.push({ role: 'user', parts: [{ text: initialPrompt }] });
         const rawJson = await callGeminiRest(contents, ONBOARDING_SYSTEM);
         contents.push({ role: 'model', parts: [{ text: rawJson }] });
-        
+
         const parsed = safeJson(rawJson, null);
         if (parsed && parsed.reply) {
-          return { reply: parsed.reply, complete: !!parsed.complete, data: parsed.data || intelligentEngine.data };
+          return { reply: parsed.reply, complete: !!parsed.complete, data: parsed.data || slotEngine.data };
         }
       } catch (e) {
-        console.warn('Gemini REST start failed, using Intelligent Engine:', e);
+        console.warn('Gemini REST start failed, using DeepSlotFillingEngine:', e);
       }
-      return intelligentEngine.start();
+      return slotEngine.start();
     },
 
     async send(userText) {
@@ -219,52 +263,19 @@ export async function createOnboardingAgent() {
 
         const parsed = safeJson(rawJson, null);
         if (parsed && parsed.reply) {
-          return { reply: parsed.reply, complete: !!parsed.complete, data: parsed.data || intelligentEngine.data };
+          return { reply: parsed.reply, complete: !!parsed.complete, data: parsed.data || slotEngine.data };
         }
       } catch (e) {
-        console.warn('Gemini REST send failed, using Intelligent Engine:', e);
+        console.warn('Gemini REST send failed, using DeepSlotFillingEngine:', e);
       }
-      return intelligentEngine.send(userText);
+      return slotEngine.send(userText);
     }
   };
 }
 
 /* ===== Workout Interview Agent ===== */
-const WORKOUT_SYSTEM = `אתה מאמן כושר אישי. נהל שיחה קצרה בעברית לבניית תוכנית אימונים שבועית. 
-אם המשתמש אומר רק "היי" — ברך בחזרה ושאל על כושר. אל תרוץ קדימה.
-החזר JSON בלבד: {"reply":"...", "complete":false, "days":[]}. אל תשתמש באימוג'ים.`;
-
 export async function createWorkoutInterview() {
-  const contents = [];
-  const intelligentEngine = new IntelligentOnboardEngine();
-
-  return {
-    async start() {
-      try {
-        contents.push({ role: 'user', parts: [{ text: 'התחל את ראיון האימונים בעברית.' }] });
-        const rawJson = await callGeminiRest(contents, WORKOUT_SYSTEM);
-        contents.push({ role: 'model', parts: [{ text: rawJson }] });
-        const parsed = safeJson(rawJson, null);
-        if (parsed && parsed.reply) return parsed;
-      } catch (e) {
-        console.warn('Workout REST failed:', e);
-      }
-      return intelligentEngine.start();
-    },
-
-    async send(userText) {
-      try {
-        contents.push({ role: 'user', parts: [{ text: userText }] });
-        const rawJson = await callGeminiRest(contents, WORKOUT_SYSTEM);
-        contents.push({ role: 'model', parts: [{ text: rawJson }] });
-        const parsed = safeJson(rawJson, null);
-        if (parsed && parsed.reply) return parsed;
-      } catch (e) {
-        console.warn('Workout REST send failed:', e);
-      }
-      return intelligentEngine.send(userText);
-    }
-  };
+  return createOnboardingAgent(['workouts']);
 }
 
 /* ===== Book Lookup ===== */
