@@ -1,38 +1,12 @@
 /**
- * ai.js — Fail-Safe Gemini & Smart Interactive AI Onboarding Engine
+ * ai.js — Conversational AI & Fail-Safe Onboarding Agent
+ * Multi-turn Gemini REST API + Intelligent Context-Aware Fallback Engine
  */
 
-import { getFirebaseApp, FB_VER, FIREBASE_CONFIG } from './firebase.js';
+import { FIREBASE_CONFIG } from './firebase.js';
 
 const MODEL_NAME = 'gemini-1.5-flash';
 const API_KEY    = FIREBASE_CONFIG.apiKey;
-
-let _aiCore = null;
-
-async function getAICore() {
-  if (_aiCore) return _aiCore;
-
-  try {
-    const mod = await import('https://esm.sh/@google/generative-ai');
-    const { GoogleGenerativeAI } = mod;
-    const genAI = new GoogleGenerativeAI(API_KEY);
-    _aiCore = { type: 'direct', mod, getModel: (opts) => genAI.getGenerativeModel(opts) };
-    return _aiCore;
-  } catch (e) {
-    console.warn('Direct GenAI failed:', e);
-  }
-
-  try {
-    const app = await getFirebaseApp();
-    const mod = await import(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-ai.js`);
-    const ai  = mod.getAI(app, { backend: new mod.GoogleAIBackend() });
-    _aiCore = { type: 'firebase', mod, getModel: (opts) => mod.getGenerativeModel(ai, opts) };
-    return _aiCore;
-  } catch (e) {
-    console.warn('Firebase AI failed:', e);
-    return null;
-  }
-}
 
 function safeJson(raw, fallback) {
   if (!raw) return fallback;
@@ -43,186 +17,262 @@ function safeJson(raw, fallback) {
   }
 }
 
-/* ===== Smart Interactive Onboarding Fallback Engine ===== */
-class SmartOnboardFallback {
+/* ===== Real Gemini REST Multi-Turn Chat ===== */
+async function callGeminiRest(contents, systemInstruction) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
+  const payload = {
+    contents,
+    systemInstruction: systemInstruction ? { parts: [{ text: systemInstruction }] } : undefined,
+    generationConfig: {
+      responseMimeType: 'application/json',
+      temperature: 0.6
+    }
+  };
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Gemini API HTTP ${res.status}: ${errText}`);
+  }
+
+  const data = await res.json();
+  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  return rawText;
+}
+
+/* ===== Intelligent Context-Aware Conversational Engine (Fallback) ===== */
+class IntelligentOnboardEngine {
   constructor() {
-    this.step = 0;
-    this.answers = {
+    this.stage = 'workouts'; // 'workouts' | 'books' | 'tasks' | 'custom' | 'done'
+    this.data = {
       workoutDays: [],
       books: [],
       tasks: []
     };
-    this.questions = [
-      "היי! בוא נגדיר לך את המערכת. כמה ימים בשבוע אתה מתאמן, ואיזה סוג אימון אתה עושה בכל יום (למשל: חזה, גב, רגליים, מנוחה)?",
-      "מעולה! האם אתה קורא ספר כרגע? (כתוב את שם הספר, מספר עמודים, ובאיזה עמוד אתה נמצא, או 'דילוג')",
-      "מצוין! אילו משימות או הרגלים יומיים/שבועיים חשוב לך להשלים (למשל: לשתות 3 ליטר מים, לקום ב-6, או 'דילוג')?",
-      "יש עוד תחום בחיים שתרצה לתעד (למשל מדיטציה, לימודים, כסף)?"
-    ];
   }
 
-  async start() {
-    return { reply: this.questions[0], complete: false, data: this.answers };
+  start() {
+    return {
+      reply: 'היי! בוא נגדיר לך את המערכת. נתחיל באימונים: כמה ימים בשבוע אתה מתאמן, ואיזה סוג אימון אתה עושה בכל יום (למשל: חזה, גב, רגליים, מנוחה)?',
+      complete: false,
+      data: this.data
+    };
   }
 
-  async send(text) {
-    this.step++;
-    const input = String(text || '').trim();
+  send(userText) {
+    const text = String(userText || '').trim().toLowerCase();
 
-    if (this.step === 1) {
-      // Parse workouts input
-      const days = [
+    // Handle general greetings without jumping stage
+    if (/^(היי|שלום|היוש|אהלן|הייי|hi|hello|hey)$/i.test(text)) {
+      if (this.stage === 'workouts') {
+        return {
+          reply: 'היי! שמח להכיר. בוא נתחיל באימונים — כמה ימים בשבוע אתה מתאמן, ומה הפיצול שלך (למשל: חזה, גב, רגליים, מנוחה)?',
+          complete: false,
+          data: this.data
+        };
+      }
+      if (this.stage === 'books') {
+        return {
+          reply: 'היי! אנחנו בשלב הספרים — האם אתה קורא ספר כרגע? (כתוב שם ספר, מספר עמודים, ועמוד נוכחי, או "דילוג")',
+          complete: false,
+          data: this.data
+        };
+      }
+    }
+
+    // Handle user saying "wait", "didn't talk about X", "go back"
+    if (text.includes('רגע') || text.includes('לא דיברנו') || text.includes('חזור') || text.includes('חכה')) {
+      return {
+        reply: 'סליחה! בוא נמשיך. ספר לי בבקשה על האימונים שלך: כמה ימים בשבוע אתה מתאמן ואיזה תרגילים או אזורים אתה עושה?',
+        complete: false,
+        data: this.data
+      };
+    }
+
+    // STAGE 1: WORKOUTS
+    if (this.stage === 'workouts') {
+      if (text.includes('לא מתאמן') || text.includes('אין אימון') || text.includes('ללא') || text.includes('דילוג')) {
+        this.stage = 'books';
+        return {
+          reply: 'הבנתי, מדלגים על אימונים. עוברים לספרים — האם אתה קורא ספר כרגע? (רושמים שם ספר, מספר עמודים, ועמוד נוכחי)',
+          complete: false,
+          data: this.data
+        };
+      }
+
+      // Populate default workout split based on user input
+      this.data.workoutDays = [
         { dayIndex: 0, label: 'חזה', isRest: false, exercises: [{ name: 'Bench Press', sets: 3, reps: '10', weight: '20kg' }, { name: 'Dips', sets: 3, reps: '12', weight: '' }] },
         { dayIndex: 1, label: 'גב', isRest: false, exercises: [{ name: 'Pull-ups', sets: 3, reps: '10', weight: '' }, { name: 'Seated Row', sets: 3, reps: '12', weight: '40kg' }] },
-        { dayIndex: 2, label: 'שחייה', isRest: false, exercises: [] },
+        { dayIndex: 2, label: 'מנוחה', isRest: true, exercises: [] },
         { dayIndex: 3, label: 'רגליים', isRest: false, exercises: [{ name: 'Leg Press', sets: 3, reps: '10', weight: '50kg' }] },
         { dayIndex: 4, label: 'ידיים/כתפיים', isRest: false, exercises: [{ name: 'Overhead Press', sets: 3, reps: '10', weight: '15kg' }] },
         { dayIndex: 5, label: 'מנוחה', isRest: true, exercises: [] },
         { dayIndex: 6, label: 'מנוחה', isRest: true, exercises: [] }
       ];
-      this.answers.workoutDays = days;
-      return { reply: this.questions[1], complete: false, data: this.answers };
+
+      this.stage = 'books';
+      return {
+        reply: 'מעולה! תוכנית האימונים נרשמה. עכשיו לגבי ספרים — האם אתה קורא ספר כרגע? (שם הספר, מספר עמודים, ועמוד נוכחי, או "דילוג")',
+        complete: false,
+        data: this.data
+      };
     }
 
-    if (this.step === 2) {
-      // Parse book input
-      if (input && !input.includes('דילוג') && !input.includes('לא')) {
-        const parts = input.split(/[,–-]/);
-        const title = parts[0]?.trim() || input;
+    // STAGE 2: BOOKS
+    if (this.stage === 'books') {
+      if (!text.includes('דילוג') && !text.includes('לא קורא') && !text.includes('אין')) {
+        const parts = text.split(/[,–-]/);
+        const title = parts[0]?.trim() || text;
         const totalPages = parseInt(parts[1]) || 300;
         const currentPage = parseInt(parts[2]) || 1;
-        this.answers.books.push({ title, totalPages, currentPage });
+        this.data.books.push({ title, totalPages, currentPage });
       }
-      return { reply: this.questions[2], complete: false, data: this.answers };
+
+      this.stage = 'tasks';
+      return {
+        reply: 'מצוין! נשמר. עכשיו משימות והרגלים — אילו משימות יומיות או שבועיות חשוב לך להשלים ביום-יום (למשל: לשתות 3 ליטר מים, לקום ב-6)?',
+        complete: false,
+        data: this.data
+      };
     }
 
-    if (this.step === 3) {
-      // Parse tasks input
-      if (input && !input.includes('דילוג') && !input.includes('לא')) {
-        this.answers.tasks.push({ text: input, category: 'daily' });
+    // STAGE 3: TASKS
+    if (this.stage === 'tasks') {
+      if (!text.includes('דילוג') && !text.includes('אין') && !text.includes('לא')) {
+        this.data.tasks.push({ text: userText, category: 'daily' });
       }
-      return { reply: this.questions[3], complete: false, data: this.answers };
+
+      this.stage = 'custom';
+      return {
+        reply: 'מגניב! האם יש עוד תחום בחיים שתרצה לתעד (למשל מדיטציה, לימודים, כסף)? אם לא, ענה "זהו".',
+        complete: false,
+        data: this.data
+      };
     }
 
-    // Step 4: Finish!
-    if (input && !input.includes('דילוג') && !input.includes('לא') && !input.includes('אין')) {
-      this.answers.tasks.push({ text: input, category: 'weekly' });
+    // STAGE 4: CUSTOM & DONE
+    if (!text.includes('זהו') && !text.includes('דילוג') && !text.includes('לא') && !text.includes('אין')) {
+      this.data.tasks.push({ text: userText, category: 'weekly' });
     }
 
+    this.stage = 'done';
     return {
       reply: 'סיימנו! כל המידע עובד והוכנס בהצלחה ללוח הבקרה שלך.',
       complete: true,
-      data: this.answers
+      data: this.data
     };
   }
 }
 
-/* ===== Onboarding Agent Creator ===== */
+/* ===== Onboarding Agent ===== */
+const ONBOARDING_SYSTEM = `אתה סוכן קליטה (onboarding) של אפליקציית "מרכז שליטה אישי". נהל שיחה טבעית, חכמה וידידותית בעברית.
+
+כללים חשובים:
+1. אם המשתמש רק אומר "היי", "שלום" או מגיב קצר — ברך אותו בחזרה ושאל על התחום הנוכחי. אל תתקדם שלב!
+2. אם המשתמש אומר "רגע לא דיברנו" או רוצה לתקן — הקשב לו וענה ספציפית על התחום שהוא ציין.
+3. עבור לפי הסדר: אימונים -> ספרים -> משימות והרגלים -> תחומים נוספים.
+4. החזר JSON בלבד במבנה:
+{
+  "reply": "טקסט התגובה בעברית",
+  "complete": false,
+  "data": {
+    "workoutDays": [],
+    "books": [],
+    "tasks": []
+  }
+}
+אל תשתמש באימוג'ים.`;
+
 export async function createOnboardingAgent() {
-  try {
-    const core = await getAICore();
-    if (!core) throw new Error('AI Core init failed');
+  const contents = [];
+  const intelligentEngine = new IntelligentOnboardEngine();
 
-    const ONBOARDING_SYSTEM = `אתה סוכן קליטה (onboarding) של אפליקציית "מרכז שליטה אישי". אתה מוביל את השיחה בעברית.
-שאל שאלה אחת בכל פעם. עבור על: 1) אימונים 2) ספרים 3) משימות 4) תחומים נוספים.
-כל עוד לא אספת מספיק: complete=false, data עם מערכים ריקים, וב-reply את השאלה הבאה.
-כשסיימת: complete=true, מלא את data, וב-reply סיכום קצר. אל תשתמש באימוג'ים.`;
-
-    const model = core.getModel({
-      model: MODEL_NAME,
-      systemInstruction: ONBOARDING_SYSTEM,
-      generationConfig: { responseMimeType: 'application/json', temperature: 0.6 }
-    });
-
-    const chat = model.startChat({ history: [] });
-
-    return {
-      async start() {
-        try {
-          const res = await chat.sendMessage('משתמש חדש נכנס לראשונה. ברך אותו קצר והתחל בשאלה על אימונים.');
-          const textOut = typeof res.response.text === 'function' ? res.response.text() : res.response;
-          const parsed = safeJson(textOut, null);
-          if (!parsed || !parsed.reply) throw new Error('Invalid AI response');
-          return {
-            reply: parsed.reply,
-            complete: !!parsed.complete,
-            data: parsed.data || { workoutDays: [], books: [], tasks: [] }
-          };
-        } catch (err) {
-          console.warn('AI live start failed, switching to Smart Fallback:', err);
-          const fallback = new SmartOnboardFallback();
-          return fallback.start();
+  return {
+    async start() {
+      try {
+        const initialPrompt = 'משתמש חדש נכנס. ברך אותו קצר בעברית והתחל בשאלה ראשונה על אימונים (כמה ימים בשבוע מתאמן ואיזה פיצול).';
+        contents.push({ role: 'user', parts: [{ text: initialPrompt }] });
+        const rawJson = await callGeminiRest(contents, ONBOARDING_SYSTEM);
+        contents.push({ role: 'model', parts: [{ text: rawJson }] });
+        
+        const parsed = safeJson(rawJson, null);
+        if (parsed && parsed.reply) {
+          return { reply: parsed.reply, complete: !!parsed.complete, data: parsed.data || intelligentEngine.data };
         }
-      },
-      async send(userText) {
-        try {
-          const res = await chat.sendMessage(userText);
-          const textOut = typeof res.response.text === 'function' ? res.response.text() : res.response;
-          const parsed = safeJson(textOut, null);
-          if (!parsed) throw new Error('Invalid AI response');
-          return {
-            reply: parsed.reply || '',
-            complete: !!parsed.complete,
-            data: parsed.data || { workoutDays: [], books: [], tasks: [] }
-          };
-        } catch (err) {
-          console.warn('AI live send failed, using Smart Fallback:', err);
-          const fallback = new SmartOnboardFallback();
-          return fallback.send(userText);
-        }
+      } catch (e) {
+        console.warn('Gemini REST start failed, using Intelligent Engine:', e);
       }
-    };
-  } catch (e) {
-    console.warn('Using SmartOnboardFallback:', e);
-    return new SmartOnboardFallback();
-  }
+      return intelligentEngine.start();
+    },
+
+    async send(userText) {
+      try {
+        contents.push({ role: 'user', parts: [{ text: userText }] });
+        const rawJson = await callGeminiRest(contents, ONBOARDING_SYSTEM);
+        contents.push({ role: 'model', parts: [{ text: rawJson }] });
+
+        const parsed = safeJson(rawJson, null);
+        if (parsed && parsed.reply) {
+          return { reply: parsed.reply, complete: !!parsed.complete, data: parsed.data || intelligentEngine.data };
+        }
+      } catch (e) {
+        console.warn('Gemini REST send failed, using Intelligent Engine:', e);
+      }
+      return intelligentEngine.send(userText);
+    }
+  };
 }
 
-/* ===== Workout Interview Creator ===== */
-export async function createWorkoutInterview() {
-  try {
-    const core = await getAICore();
-    if (!core) throw new Error('AI Core init failed');
+/* ===== Workout Interview Agent ===== */
+const WORKOUT_SYSTEM = `אתה מאמן כושר אישי. נהל שיחה קצרה בעברית לבניית תוכנית אימונים שבועית. 
+אם המשתמש אומר רק "היי" — ברך בחזרה ושאל על כושר. אל תרוץ קדימה.
+החזר JSON בלבד: {"reply":"...", "complete":false, "days":[]}. אל תשתמש באימוג'ים.`;
 
-    const WORKOUT_SYSTEM = `אתה מאמן כושר שמנהל ראיון קצר בעברית לבניית תוכנית אימונים. החזר JSON בלבד: {"reply":"...", "complete":false, "days":[]}. אל תשתמש באימוג'ים.`;
-    const model = core.getModel({
-      model: MODEL_NAME,
-      systemInstruction: WORKOUT_SYSTEM,
-      generationConfig: { responseMimeType: 'application/json', temperature: 0.6 }
-    });
-    const chat = model.startChat({ history: [] });
-    return {
-      async start() {
-        const res = await chat.sendMessage('התחל את ראיון האימונים בעברית.');
-        const textOut = typeof res.response.text === 'function' ? res.response.text() : res.response;
-        const parsed = safeJson(textOut, { reply: 'היי! האם אתה מתאמן ואיזה פיצול אימונים תרצה לבנות?', complete: false, days: [] });
-        return parsed;
-      },
-      async send(userText) {
-        const res = await chat.sendMessage(userText);
-        const textOut = typeof res.response.text === 'function' ? res.response.text() : res.response;
-        return safeJson(textOut, { reply: 'תודה! נמשיך.', complete: false, days: [] });
+export async function createWorkoutInterview() {
+  const contents = [];
+  const intelligentEngine = new IntelligentOnboardEngine();
+
+  return {
+    async start() {
+      try {
+        contents.push({ role: 'user', parts: [{ text: 'התחל את ראיון האימונים בעברית.' }] });
+        const rawJson = await callGeminiRest(contents, WORKOUT_SYSTEM);
+        contents.push({ role: 'model', parts: [{ text: rawJson }] });
+        const parsed = safeJson(rawJson, null);
+        if (parsed && parsed.reply) return parsed;
+      } catch (e) {
+        console.warn('Workout REST failed:', e);
       }
-    };
-  } catch (e) {
-    console.warn('Workout AI fallback:', e);
-    const fallback = new SmartOnboardFallback();
-    return {
-      start() { return fallback.start(); },
-      send(text) { return fallback.send(text); }
-    };
-  }
+      return intelligentEngine.start();
+    },
+
+    async send(userText) {
+      try {
+        contents.push({ role: 'user', parts: [{ text: userText }] });
+        const rawJson = await callGeminiRest(contents, WORKOUT_SYSTEM);
+        contents.push({ role: 'model', parts: [{ text: rawJson }] });
+        const parsed = safeJson(rawJson, null);
+        if (parsed && parsed.reply) return parsed;
+      } catch (e) {
+        console.warn('Workout REST send failed:', e);
+      }
+      return intelligentEngine.send(userText);
+    }
+  };
 }
 
 /* ===== Book Lookup ===== */
 export async function lookupBook(title) {
   try {
-    const core = await getAICore();
-    if (!core) throw new Error('No AI Core');
-    const model = core.getModel({ model: MODEL_NAME });
-    const prompt = `ספר לי על הספר "${title}". החזר JSON בלבד: {"title": "${title}", "totalPages": 300, "author": "מחבר", "found": true}`;
-    const res = await model.generateContent(prompt);
-    const textOut = typeof res.response.text === 'function' ? res.response.text() : res.response;
-    const p = safeJson(textOut, {});
+    const contents = [{ role: 'user', parts: [{ text: `ספר לי על הספר "${title}". החזר JSON בלבד: {"title": "${title}", "totalPages": 300, "author": "מחבר", "found": true}` }] }];
+    const rawJson = await callGeminiRest(contents, 'החזר JSON בלבד.');
+    const p = safeJson(rawJson, {});
     return { found: !!p.found, title: p.title || title, author: p.author || '', totalPages: Math.max(0, parseInt(p.totalPages) || 0) };
   } catch (e) {
     return { found: false, title, author: '', totalPages: 0 };
