@@ -1,13 +1,15 @@
 /**
  * app.js — Personal Command Center
- * Main application: state management, screen rendering, CRUD operations
+ * Main application: state management, screen rendering, CRUD operations, AI Agents
  */
 import { initAuth, checkRedirectResult, getCollection, settingsStore, signIn, register, signInGoogle, signInDemo, logOut, currentUser, isMockMode } from './firebase.js';
+import { createWorkoutInterview, createOnboardingAgent, lookupBook } from './ai.js';
 
 const state = {
   currentScreen: 'home',
   user: null,
   loading: false,
+  hasCustomPlan: false,
 
   selectedDay: new Date().getDay(),
   workoutData: {},
@@ -82,6 +84,7 @@ function initCollections() {
 let toastTimer = null;
 function showToast(msg, duration = 2500) {
   const el = document.getElementById('toast');
+  if (!el) return;
   el.textContent = msg;
   el.classList.add('show');
   clearTimeout(toastTimer);
@@ -134,10 +137,214 @@ function updateHeader() {
   document.getElementById('streak-count').textContent = `🔥 ${state.streak} שבועות ברצף!`;
 }
 
+// ─── AI Controller State & Helpers ──────────────────────────────────────────
+let aiInterview = null;
+let aiOnComplete = null;
+let aiBusy = false;
+
+function aiSetInputEnabled(enabled) {
+  const inp = document.getElementById('ai-input');
+  const btn = document.getElementById('ai-send-btn');
+  if (inp) inp.disabled = !enabled;
+  if (btn) btn.disabled = !enabled;
+}
+
+function aiSetTyping(typing) {
+  const el = document.getElementById('ai-typing');
+  if (el) el.style.display = typing ? 'flex' : 'none';
+}
+
+function aiAppendBubble(sender, text) {
+  const box = document.getElementById('ai-chat-messages');
+  if (!box) return;
+  const bubble = document.createElement('div');
+  bubble.className = `ai-bubble ${sender === 'user' ? 'user' : 'bot'}`;
+  bubble.textContent = text;
+  box.appendChild(bubble);
+  box.scrollTop = box.scrollHeight;
+}
+
+async function startAISession({ title, greeting, createSession, onComplete }) {
+  const titleEl = document.getElementById('ai-modal-title');
+  if (titleEl) titleEl.textContent = title;
+  aiOnComplete = onComplete;
+
+  openModal('ai-modal');
+  const box = document.getElementById('ai-chat-messages');
+  if (box) box.innerHTML = '';
+  aiSetInputEnabled(false);
+  aiSetTyping(true);
+  aiBusy = true;
+  try {
+    aiInterview = await createSession();
+    const first = await aiInterview.start();
+    aiSetTyping(false);
+    aiAppendBubble('ai', first.reply || greeting);
+    if (first.complete && aiOnComplete) await aiOnComplete(first);
+  } catch (e) {
+    console.error('AI init error:', e);
+    aiSetTyping(false);
+    aiAppendBubble('ai', '⚠️ לא הצלחתי להתחבר ל-AI. ודא ש-Firebase AI Logic מופעל בקונסול.');
+  } finally {
+    aiBusy = false;
+    aiSetInputEnabled(true);
+  }
+}
+
+window.app = window.app || {};
+
+window.app.openAIBuilder = async () => {
+  if (state.hasCustomPlan && !confirm('כבר יש לך תוכנית אימונים. לבנות מחדש ולהחליף אותה?')) return;
+  await startAISession({
+    title: '✨ בניית אימונים עם AI',
+    greeting: 'שלום! האם אתה מתאמן?',
+    createSession: createWorkoutInterview,
+    onComplete: async (res) => {
+      if (res.days && res.days.length) {
+        await applyAIPlan(res.days);
+        aiAppendBubble('ai', '✅ התוכנית נוספה לממשק! עובר למסך האימונים...');
+        setTimeout(() => {
+          closeModal('ai-modal');
+          aiInterview = null;
+          navigateTo('workouts');
+          showToast('💪 תוכנית האימונים נבנתה!');
+        }, 1400);
+      }
+    },
+  });
+};
+
+window.app.openOnboardingAgent = async () => {
+  await startAISession({
+    title: '🤖 בוא נכיר — הגדרת המערכת',
+    greeting: 'היי! בוא נגדיר לך את המערכת. האם אתה מתאמן?',
+    createSession: createOnboardingAgent,
+    onComplete: async (res) => {
+      await applyOnboarding(res.data);
+      aiAppendBubble('ai', '✅ סיימנו! כל הממידע נכנס למערכת. עובר לדשבורד...');
+      setTimeout(() => {
+        closeModal('ai-modal');
+        aiInterview = null;
+        navigateTo('home');
+        showToast('🎉 המערכת שלך מוכנה!');
+      }, 1600);
+    },
+  });
+};
+
+window.app.aiSend = async () => {
+  const inp = document.getElementById('ai-input');
+  if (!inp || !aiInterview || aiBusy) return;
+  const text = inp.value.trim();
+  if (!text) return;
+  
+  inp.value = '';
+  aiAppendBubble('user', text);
+  aiSetInputEnabled(false);
+  aiSetTyping(true);
+  aiBusy = true;
+
+  try {
+    const res = await aiInterview.send(text);
+    aiSetTyping(false);
+    if (res.reply) {
+      aiAppendBubble('ai', res.reply);
+    }
+    if (res.complete && aiOnComplete) {
+      await aiOnComplete(res);
+    }
+  } catch (e) {
+    console.error('AI error:', e);
+    aiSetTyping(false);
+    aiAppendBubble('ai', '⚠️ שגיאה בתקשורת עם ה-AI. נסה שוב.');
+  } finally {
+    aiBusy = false;
+    aiSetInputEnabled(true);
+  }
+};
+
+async function applyAIPlan(days) {
+  if (!Array.isArray(days)) return;
+  days.forEach((dayObj) => {
+    const dIdx = parseInt(dayObj.dayIndex);
+    if (isNaN(dIdx) || dIdx < 0 || dIdx > 6) return;
+    const dayType = WEEK_SCHEDULE[dIdx]?.type;
+    if (!dayType || dayType === 'rest' || dayType === 'swim1' || dayType === 'swim2') return;
+
+    if (dayObj.isRest) {
+      DEFAULT_EXERCISES[dayType] = [];
+    } else if (Array.isArray(dayObj.exercises) && dayObj.exercises.length > 0) {
+      DEFAULT_EXERCISES[dayType] = dayObj.exercises.map((ex) => ({
+        name: ex.name || 'תרגיל',
+        sets: Array.from({ length: parseInt(ex.sets) || 3 }, () =>
+          ex.weight ? { reps: ex.reps || '10', weight: ex.weight } : { reps: ex.reps || '10' }
+        ),
+        tag: `${ex.sets || 3}×${ex.reps || 10}${ex.weight ? ' ' + ex.weight : ''}`,
+      }));
+    }
+  });
+  state.hasCustomPlan = true;
+  await saveCustomExercises();
+  renderExercises();
+}
+
+async function applyOnboarding(data) {
+  data = data || {};
+
+  if (Array.isArray(data.workoutDays) && data.workoutDays.length) {
+    await applyAIPlan(data.workoutDays);
+  }
+
+  for (const b of (data.books || [])) {
+    const title = String(b.title || '').trim();
+    const pages = Math.max(1, parseInt(b.totalPages) || 0);
+    if (!title || pages < 1) continue;
+    const current = Math.max(0, Math.min(pages, parseInt(b.currentPage) || 0));
+    try {
+      const doc = await colBooks.add({ title, totalPages: pages, currentPage: current, finished: false });
+      state.books.push(doc);
+    } catch (e) { console.warn('onboarding book add failed:', e); }
+  }
+
+  for (const t of (data.tasks || [])) {
+    const txt = String(t.text || '').trim();
+    if (!txt) continue;
+    const category = t.category === 'weekly' ? 'weekly' : 'daily';
+    try {
+      const doc = await colTasks.add({ text: txt, category, done: false });
+      state.tasks.push(doc);
+    } catch (e) { console.warn('onboarding task add failed:', e); }
+  }
+
+  renderHome();
+}
+
 async function renderHome() {
   const dayIdx = new Date().getDay();
   const dayInfo = WEEK_SCHEDULE[dayIdx];
   const typeKey = dayInfo.type;
+
+  // Onboarding banner for new users
+  let banner = document.getElementById('home-onboard-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'home-onboard-banner';
+    const screenHome = document.getElementById('screen-home');
+    if (screenHome) screenHome.insertBefore(banner, screenHome.firstChild);
+  }
+
+  const isNew = !state.hasCustomPlan && state.books.length === 0 && state.tasks.length === 0;
+  if (isNew) {
+    banner.innerHTML = `
+      <div class="setup-card">
+        <div class="setup-card-emoji">🤖</div>
+        <div class="setup-card-title">בוא נכיר ונגדיר לך את המערכת</div>
+        <div class="setup-card-sub">הסוכן החכם ישאל אותך כמה שאלות על אימונים, ספרים, משימות ותחומים נוספים — והכול ייכנס אוטומטית למקומו.</div>
+        <button class="btn btn-ai btn-full" onclick="app.openOnboardingAgent()">🤖 התחל עם הסוכן</button>
+      </div>`;
+  } else {
+    banner.innerHTML = '';
+  }
 
   const woCompEl = document.getElementById('today-workout-completion');
   const woNameEl = document.getElementById('today-workout-name');
@@ -269,7 +476,6 @@ function renderExercises() {
   }).join('');
 }
 
-window.app = window.app || {};
 window.app.selectDay = (i) => { state.selectedDay = i; renderWorkouts(); };
 
 window.app.toggleSet = (dayIdx, exIdx, setIdx) => {
@@ -349,6 +555,7 @@ async function loadWorkoutData() {
     if (exDoc?.data) {
       const saved = JSON.parse(exDoc.data);
       Object.keys(saved).forEach(key => { DEFAULT_EXERCISES[key] = saved[key]; });
+      state.hasCustomPlan = true;
     }
   } catch (e) { console.warn('Could not load workout data:', e); }
 }
@@ -758,6 +965,17 @@ async function onUserSignedIn(user) {
   updateHeader();
   hideAuthScreen();
   navigateTo('home');
+  maybeAutoOnboard();
+}
+
+function maybeAutoOnboard() {
+  const uid = state.user?.uid || 'anon';
+  const key = `pcc_onboarded_${uid}`;
+  const isNew = !state.hasCustomPlan && state.books.length === 0 && state.tasks.length === 0;
+  if (isNew && !localStorage.getItem(key)) {
+    localStorage.setItem(key, '1');
+    setTimeout(() => { window.app.openOnboardingAgent(); }, 700);
+  }
 }
 
 async function bootstrap() {

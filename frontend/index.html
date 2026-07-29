@@ -306,6 +306,24 @@
   </div>
 </div>
 
+<div id="ai-modal" class="modal-overlay">
+  <div class="modal-sheet ai-modal-sheet" role="dialog" aria-modal="true" aria-labelledby="ai-modal-title">
+    <div class="modal-handle"></div>
+    <div class="flex items-center justify-between mb-3">
+      <div id="ai-modal-title" class="modal-title" style="margin-bottom:0">🤖 סוכן AI</div>
+      <button class="icon-btn" onclick="app.closeModal('ai-modal')">✕</button>
+    </div>
+    <div id="ai-chat-messages" class="ai-chat-messages"></div>
+    <div id="ai-typing" class="ai-typing" style="display:none">
+      <span>🤖 ה-AI חושב...</span>
+    </div>
+    <div class="ai-input-row mt-2">
+      <input id="ai-input" class="input-field" type="text" placeholder="ענה לסוכן..." onkeydown="if(event.key==='Enter') app.aiSend()" />
+      <button id="ai-send-btn" class="btn btn-primary" onclick="app.aiSend()">שלח</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <script type="module" src="./app.js"></script>
