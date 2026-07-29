@@ -656,11 +656,17 @@ function aiAppendBubble(sender, text) {
   box.scrollTop = box.scrollHeight;
 }
 
+function aiSetInputRowVisible(visible) {
+  const row = document.querySelector('.ai-input-row');
+  if (row) row.style.display = visible ? 'flex' : 'none';
+}
+
 async function startAISession({ title, createSession, onComplete }) {
   const titleEl = document.getElementById('ai-modal-title');
   if (titleEl) titleEl.textContent = title;
   aiOnComplete = onComplete;
   openModal('ai-modal');
+  aiSetInputRowVisible(true);
   const box = document.getElementById('ai-chat-messages');
   if (box) box.innerHTML = '';
   aiSetInputEnabled(false);
@@ -702,7 +708,7 @@ window.app.openAIBuilder = async () => {
   });
 };
 
-let selectedDomainsSet = new Set(['workouts', 'books', 'tasks']);
+let selectedDomainsSet = new Set();
 
 window.app.toggleDomainChip = (domainKey) => {
   if (selectedDomainsSet.has(domainKey)) {
@@ -729,7 +735,7 @@ window.app.addCustomDomain = () => {
     chip.id = `domain-chip-${domainKey}`;
     chip.className = 'domain-chip selected';
     chip.onclick = () => window.app.toggleDomainChip(domainKey);
-    chip.innerHTML = `<span>✨ ${escHtml(val)}</span><span class="domain-chip-checkbox">✓</span>`;
+    chip.innerHTML = `<span>${escHtml(val)}</span><span class="domain-chip-checkbox">✓</span>`;
     list.appendChild(chip);
   }
 };
@@ -737,7 +743,7 @@ window.app.addCustomDomain = () => {
 window.app.startCustomizedInterview = async () => {
   const domainsArr = Array.from(selectedDomainsSet);
   if (domainsArr.length === 0) {
-    showToast('בחר לפחות תחום אחד להתחלה');
+    showToast('בחר לפחות תחום אחד או הוסף תחום להתחלה');
     return;
   }
 
@@ -765,7 +771,7 @@ window.app.openOnboardingAgent = async () => {
   const box = document.getElementById('ai-chat-messages');
   if (!box) return;
 
-  selectedDomainsSet = new Set(['workouts', 'books', 'tasks']);
+  selectedDomainsSet = new Set();
 
   box.innerHTML = `
     <div class="ai-bubble ai">
@@ -774,16 +780,16 @@ window.app.openOnboardingAgent = async () => {
     </div>
 
     <div id="domain-checklist-container" class="domain-checklist">
-      <div id="domain-chip-workouts" class="domain-chip selected" onclick="app.toggleDomainChip('workouts')">
-        <span>🏋️ אימונים וכושר</span>
+      <div id="domain-chip-workouts" class="domain-chip" onclick="app.toggleDomainChip('workouts')">
+        <span>אימונים וכושר</span>
         <span class="domain-chip-checkbox">✓</span>
       </div>
-      <div id="domain-chip-books" class="domain-chip selected" onclick="app.toggleDomainChip('books')">
-        <span>📚 קריאת ספרים</span>
+      <div id="domain-chip-books" class="domain-chip" onclick="app.toggleDomainChip('books')">
+        <span>קריאת ספרים</span>
         <span class="domain-chip-checkbox">✓</span>
       </div>
-      <div id="domain-chip-tasks" class="domain-chip selected" onclick="app.toggleDomainChip('tasks')">
-        <span>📋 משימות והרגלים</span>
+      <div id="domain-chip-tasks" class="domain-chip" onclick="app.toggleDomainChip('tasks')">
+        <span>משימות והרגלים</span>
         <span class="domain-chip-checkbox">✓</span>
       </div>
     </div>
@@ -796,7 +802,7 @@ window.app.openOnboardingAgent = async () => {
     <button class="btn btn-primary btn-full mt-2" onclick="app.startCustomizedInterview()">התחל ראיון מותאם אישית</button>
   `;
 
-  aiSetInputEnabled(false);
+  aiSetInputRowVisible(false);
 };
 
 window.app.aiSend = async () => {
