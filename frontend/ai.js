@@ -1,61 +1,54 @@
 /**
- * ai.js — Firebase / Gemini AI Integrations
- * Workouts Builder & Multi-Domain Onboarding Agent
+ * ai.js — Gemini-powered features via Firebase AI Logic (free Gemini Developer API)
+ * SETUP: Firebase Console → Build → AI Logic → Get started → "Gemini Developer API"
  */
 
-const MODEL_NAME = 'gemini-1.5-flash';
-const API_KEY    = 'AIzaSyBaJ2VOB4Ne-4ZVLPQDvvfLvMkwWuPqATU';
+import { getFirebaseApp, FB_VER } from './firebase.js';
 
-let _aiCore = null;
+const MODEL_NAME = 'gemini-2.5-flash';
+
+let _aiMod = null;
+let _aiInstance = null;
 
 async function getAICore() {
-  if (_aiCore) return _aiCore;
-  const mod = await import('https://esm.sh/@google/generative-ai');
-  const { GoogleGenerativeAI } = mod;
-  const ai = new GoogleGenerativeAI(API_KEY);
-  _aiCore = { mod, ai };
-  return _aiCore;
+  if (_aiInstance && _aiMod) return { mod: _aiMod, ai: _aiInstance };
+  const app = await getFirebaseApp();
+  _aiMod = await import(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-ai.js`);
+  _aiInstance = _aiMod.getAI(app, { backend: new _aiMod.GoogleAIBackend() });
+  return { mod: _aiMod, ai: _aiInstance };
 }
 
-function safeJson(str, fallback) {
-  try {
-    const clean = str.replace(/```json\n?|\n?```/g, '').trim();
-    return JSON.parse(clean);
-  } catch {
-    return fallback;
+function safeJson(raw, fallback) {
+  try { return JSON.parse(raw); }
+  catch {
+    const m = raw && raw.match(/\{[\s\S]*\}/);
+    try { return m ? JSON.parse(m[0]) : fallback; } catch { return fallback; }
   }
 }
 
-/* ===== Workout builder agent ===== */
-const WORKOUT_SYSTEM = `אתה מאמן כושר מומחה באפליקציית "קומנד סנטר". תפקידך לבנות תוכנית אימונים שבועית מותאמת אישית.
-נהל שיחה קצרה בעברית. שאל על מטרות, ימים בשבוע, ניסיון וציוד.
-בכל תשובה החזר JSON:
-{
-  "reply": "טקסט התגובה בעברית",
-  "complete": true/false,
-  "days": [
-    {
-      "dayIndex": 0..6,
-      "label": "שם האימון",
-      "icon": "אימוג'י",
-      "isRest": false,
-      "exercises": [ { "name": "שם", "sets": 3, "reps": "10-12", "weight": "20kg" } ]
-    }
-  ]
-}`;
+/* ===== Workout builder — guided interview ===== */
 
-export async function createWorkoutInterview() {
+const WORKOUT_SYSTEM = `אתה מאמן כושר אישי שמנהל ראיון קצר וידידותי בעברית כדי לבנות תוכנית אימונים שבועית מותאמת אישית.
+
+חוקים:
+- שאל שאלה אחת בכל פעם. שאלות קצרות, ברורות וישירות.
+- התחל בשאלה האם המשתמש מתאמן בכלל.
+- אסוף בהדרגה: כמה ימים בשבוע, סוג הפיצול (למשל פוש/פול/רגליים, אזורי גוף, מלא), אילו תרגילים בכל יום, כמה סטים וחזרות, ומשקלים אם ידועים, וגם ציוד זמין (חדר כושר / בית / משקל גוף).
+- זהה פערים באופן יזום: אם המשתמש שכח קבוצת שרירים חשובה (בטן, רגליים, גב) או לא ציין סטים/חזרות — שאל על כך.
+- אל תבקש "ספר לי על השגרה שלך". תמיד שאל שאלה ספציפית וממוקדת.
+- כל עוד אין לך מספיק מידע למלא תוכנית שבועית: החזר complete=false, days=[], ובשדה reply את השאלה הבאה בעברית.
+- כשיש מספיק מידע: החזר complete=true עם days מלא (0=ראשון ... 6=שבת). לימי מנוחה קבע isRest=true ו-exercises ריק. ב-reply כתוב סיכום קצר וחגיגי בעברית.
+- לכל תרגיל ספק: name (אפשר באנגלית כמו Bench Press), sets (מספר), reps (מחרוזת כמו "12" או "Failure"), weight (מחרוזת כמו "60kg" או "" אם משקל גוף).
+- icon: השאר מחרוזת ריקה "".
+- label לכל יום: שם קצר בעברית (למשל "חזה", "גב", "רגליים", "מנוחה").
+- אל תשתמש באימוג'ים בתשובות שלך.`;
+
+let _workoutModel = null;
+
+async function getWorkoutModel() {
+  if (_workoutModel) return _workoutModel;
   const { mod, ai } = await getAICore();
-  const { Schema } = mod;
-
-  const exerciseSchema = Schema.object({
-    properties: {
-      name: Schema.string(),
-      sets: Schema.integer(),
-      reps: Schema.string(),
-      weight: Schema.string(),
-    },
-  });
+  const { getGenerativeModel, Schema } = mod;
 
   const schema = Schema.object({
     properties: {
@@ -68,14 +61,23 @@ export async function createWorkoutInterview() {
             label: Schema.string(),
             icon: Schema.string(),
             isRest: Schema.boolean(),
-            exercises: Schema.array({ items: exerciseSchema }),
+            exercises: Schema.array({
+              items: Schema.object({
+                properties: {
+                  name: Schema.string(),
+                  sets: Schema.integer(),
+                  reps: Schema.string(),
+                  weight: Schema.string(),
+                },
+              }),
+            }),
           },
         }),
       }),
     },
   });
 
-  const model = ai.getGenerativeModel({
+  _workoutModel = getGenerativeModel(ai, {
     model: MODEL_NAME,
     systemInstruction: WORKOUT_SYSTEM,
     generationConfig: {
@@ -84,7 +86,11 @@ export async function createWorkoutInterview() {
       temperature: 0.6,
     },
   });
+  return _workoutModel;
+}
 
+export async function createWorkoutInterview() {
+  const model = await getWorkoutModel();
   const chat = model.startChat({ history: [] });
 
   async function sendRaw(text) {
@@ -98,23 +104,51 @@ export async function createWorkoutInterview() {
   }
 
   return {
-    start() { return sendRaw('התחל את השיחה בברכה קצרה ובשאלה ראשונה על כושר.'); },
+    start() { return sendRaw('המשתמש פתח את אשף בניית האימונים. שאל את השאלה הראשונה.'); },
     send(userText) { return sendRaw(userText); },
   };
 }
 
-/* ===== Book auto-lookup ===== */
+/* ===== Book lookup ===== */
+
+let _bookModel = null;
+
+async function getBookModel() {
+  if (_bookModel) return _bookModel;
+  const { mod, ai } = await getAICore();
+  const { getGenerativeModel, Schema } = mod;
+
+  const schema = Schema.object({
+    properties: {
+      found: Schema.boolean(),
+      title: Schema.string(),
+      author: Schema.string(),
+      totalPages: Schema.integer(),
+    },
+  });
+
+  _bookModel = getGenerativeModel(ai, {
+    model: MODEL_NAME,
+    generationConfig: {
+      responseMimeType: 'application/json',
+      responseSchema: schema,
+      temperature: 0.2,
+    },
+  });
+  return _bookModel;
+}
+
 export async function lookupBook(title) {
-  try {
-    const { ai } = await getAICore();
-    const model = ai.getGenerativeModel({ model: MODEL_NAME });
-    const prompt = `חפש מידע על הספר "${title}". החזר JSON בלבד: {"title": "שם מבוקש", "totalPages": 300, "author": "שם מחבר"}`;
-    const res = await model.generateContent(prompt);
-    return safeJson(res.response.text(), null);
-  } catch (e) {
-    console.warn('Book lookup failed:', e);
-    return null;
-  }
+  const model = await getBookModel();
+  const prompt = `ספר לי על הספר "${title}". החזר: totalPages = מספר העמודים המשוער במהדורה הנפוצה, author = שם המחבר, found = האם זיהית את הספר בוודאות. אם אינך בטוח, תן הערכה סבירה ו-found=false.`;
+  const result = await model.generateContent(prompt);
+  const p = safeJson(result.response.text(), {});
+  return {
+    found: !!p.found,
+    title: p.title || title,
+    author: p.author || '',
+    totalPages: Math.max(0, parseInt(p.totalPages) || 0),
+  };
 }
 
 /* ===== Onboarding agent — agent-led, multi-domain interview ===== */
@@ -136,16 +170,17 @@ const ONBOARDING_SYSTEM = `אתה סוכן קליטה (onboarding) של אפלי
 - כשסיימת את כל התחומים: complete=true, מלא את data, וב-reply כתוב סיכום קצר וחגיגי.
 
 מבנה data:
-- workoutDays: לוח 7 ימים (dayIndex 0=ראשון ... 6=שבת). לימי מנוחה isRest=true ו-exercises ריק. לכל תרגיל: name, sets (מספר), reps (מחרוזת), weight (מחרוזת, "" אם משקל גוף). icon=אימוג'י, label=שם קצר בעברית.
+- workoutDays: לוח 7 ימים (dayIndex 0=ראשון ... 6=שבת). לימי מנוחה isRest=true ו-exercises ריק. לכל תרגיל: name, sets (מספר), reps (מחרוזת), weight (מחרוזת, "" אם משקל גוף). icon="" (השאר ריק), label=שם קצר בעברית.
 - books: לכל ספר title, totalPages (מספר), currentPage (מספר, 0 אם בהתחלה).
-- tasks: לכל משימה/הרגל text (בעברית) ו-category ("daily" או "weekly"). תחומים מותאמים אישית הופכים גם הם ל-tasks.`;
+- tasks: לכל משימה/הרגל text (בעברית) ו-category ("daily" או "weekly"). תחומים מותאמים אישית הופכים גם הם ל-tasks.
+- אל תשתמש באימוג'ים בתשובות שלך.`;
 
 let _onboardModel = null;
 
 async function getOnboardModel() {
   if (_onboardModel) return _onboardModel;
   const { mod, ai } = await getAICore();
-  const { Schema } = mod;
+  const { getGenerativeModel, Schema } = mod;
 
   const exerciseSchema = Schema.object({
     properties: {
@@ -195,7 +230,7 @@ async function getOnboardModel() {
     },
   });
 
-  _onboardModel = ai.getGenerativeModel({
+  _onboardModel = getGenerativeModel(ai, {
     model: MODEL_NAME,
     systemInstruction: ONBOARDING_SYSTEM,
     generationConfig: {

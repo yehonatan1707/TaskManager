@@ -1,6 +1,5 @@
 /**
  * app.js — Personal Command Center
- * Main application: state management, screen rendering, CRUD operations, AI Agents
  */
 import { initAuth, checkRedirectResult, getCollection, settingsStore, signIn, register, signInGoogle, signInDemo, logOut, currentUser, isMockMode } from './firebase.js';
 import { createWorkoutInterview, createOnboardingAgent, lookupBook } from './ai.js';
@@ -9,31 +8,30 @@ const state = {
   currentScreen: 'home',
   user: null,
   loading: false,
-  hasCustomPlan: false,
-
   selectedDay: new Date().getDay(),
   workoutData: {},
   exercises: [],
-
   books: [],
   activeBook: null,
-
   tasks: [],
   taskFilter: 'daily',
   showCompleted: false,
-
   logs: [],
   streak: 0,
+  hasCustomPlan: false,
 };
 
-const WEEK_SCHEDULE = [
-  { he: 'ראשון', day: 'Sun', type: 'chest',  icon: '💪', label: 'חזה' },
-  { he: 'שני',   day: 'Mon', type: 'back',   icon: '🔙', label: 'גב' },
-  { he: 'שלישי', day: 'Tue', type: 'swim1',  icon: '🏊', label: 'שחייה 1' },
-  { he: 'רביעי', day: 'Wed', type: 'legs',   icon: '🦵', label: 'רגליים' },
-  { he: 'חמישי', day: 'Thu', type: 'arms',   icon: '💪', label: 'ידיים/כתפיים/בטן' },
-  { he: 'שישי',  day: 'Fri', type: 'rest',   icon: '😴', label: 'מנוחה' },
-  { he: 'שבת',   day: 'Sat', type: 'swim2',  icon: '🏄', label: 'שחייה 2 / גלישה' },
+const HE_DAYS  = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+const EN_DAYS  = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+let WEEK_SCHEDULE = [
+  { he: 'ראשון', day: 'Sun', type: 'chest',  icon: '', label: 'חזה' },
+  { he: 'שני',   day: 'Mon', type: 'back',   icon: '', label: 'גב' },
+  { he: 'שלישי', day: 'Tue', type: 'swim1',  icon: '', label: 'שחייה 1' },
+  { he: 'רביעי', day: 'Wed', type: 'legs',   icon: '', label: 'רגליים' },
+  { he: 'חמישי', day: 'Thu', type: 'arms',   icon: '', label: 'ידיים/כתפיים/בטן' },
+  { he: 'שישי',  day: 'Fri', type: 'rest',   icon: '', label: 'מנוחה' },
+  { he: 'שבת',   day: 'Sat', type: 'swim2',  icon: '', label: 'שחייה 2 / גלישה' },
 ];
 
 const DEFAULT_EXERCISES = {
@@ -69,10 +67,19 @@ const DEFAULT_EXERCISES = {
   swim1: [], swim2: [], rest: [],
 };
 
-let colWorkouts = null;
-let colBooks    = null;
-let colTasks    = null;
-let colLogs     = null;
+const ICON = {
+  edit:  '<svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+  trash: '<svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>',
+  book:  '<svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>',
+  check: '<svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>',
+  list:  '<svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>',
+  rest:  '<svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9c-4.97 0-9-4.03-9-9z"/></svg>',
+  activity: '<svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>',
+  journal: '<svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M9 7h7M9 11h7"/></svg>',
+  bot: '<svg viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 8V4M8 3h8M9 14h.01M15 14h.01"/></svg>',
+};
+
+let colWorkouts = null, colBooks = null, colTasks = null, colLogs = null;
 
 function initCollections() {
   colWorkouts = getCollection('workouts');
@@ -91,13 +98,30 @@ function showToast(msg, duration = 2500) {
   toastTimer = setTimeout(() => el.classList.remove('show'), duration);
 }
 
+function haptic(pattern = 15) {
+  if (navigator.vibrate) { try { navigator.vibrate(pattern); } catch { /* noop */ } }
+}
+function celebrate() {
+  const colors = ['#c3e438', '#17181c', '#ef5f7a', '#e5972a', '#6366f1'];
+  for (let i = 0; i < 18; i++) {
+    const el = document.createElement('div');
+    el.className = 'confetti';
+    const size = 7 + Math.random() * 7;
+    el.style.width = size + 'px';
+    el.style.height = size + 'px';
+    el.style.background = colors[Math.floor(Math.random() * colors.length)];
+    el.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+    el.style.left = (8 + Math.random() * 84) + '%';
+    el.style.animationDelay = (Math.random() * 0.25) + 's';
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 1900);
+  }
+}
+
 function escHtml(str) {
   return String(str)
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;')
-    .replace(/'/g,'&#39;');
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 function weekKeyNow() {
@@ -134,224 +158,37 @@ function updateHeader() {
   const today = new Date();
   const opts  = { weekday:'long', year:'numeric', month:'long', day:'numeric' };
   document.getElementById('header-date').textContent = today.toLocaleDateString('he-IL', opts);
-  document.getElementById('streak-count').textContent = `🔥 ${state.streak} שבועות ברצף!`;
-}
-
-// ─── AI Controller State & Helpers ──────────────────────────────────────────
-let aiInterview = null;
-let aiOnComplete = null;
-let aiBusy = false;
-
-function aiSetInputEnabled(enabled) {
-  const inp = document.getElementById('ai-input');
-  const btn = document.getElementById('ai-send-btn');
-  if (inp) inp.disabled = !enabled;
-  if (btn) btn.disabled = !enabled;
-}
-
-function aiSetTyping(typing) {
-  const el = document.getElementById('ai-typing');
-  if (el) el.style.display = typing ? 'flex' : 'none';
-}
-
-function aiAppendBubble(sender, text) {
-  const box = document.getElementById('ai-chat-messages');
-  if (!box) return;
-  const bubble = document.createElement('div');
-  bubble.className = `ai-bubble ${sender === 'user' ? 'user' : 'bot'}`;
-  bubble.textContent = text;
-  box.appendChild(bubble);
-  box.scrollTop = box.scrollHeight;
-}
-
-async function startAISession({ title, greeting, createSession, onComplete }) {
-  const titleEl = document.getElementById('ai-modal-title');
-  if (titleEl) titleEl.textContent = title;
-  aiOnComplete = onComplete;
-
-  openModal('ai-modal');
-  const box = document.getElementById('ai-chat-messages');
-  if (box) box.innerHTML = '';
-  aiSetInputEnabled(false);
-  aiSetTyping(true);
-  aiBusy = true;
-  try {
-    aiInterview = await createSession();
-    const first = await aiInterview.start();
-    aiSetTyping(false);
-    aiAppendBubble('ai', first.reply || greeting);
-    if (first.complete && aiOnComplete) await aiOnComplete(first);
-  } catch (e) {
-    console.error('AI init error:', e);
-    aiSetTyping(false);
-    aiAppendBubble('ai', '⚠️ לא הצלחתי להתחבר ל-AI. ודא ש-Firebase AI Logic מופעל בקונסול.');
-  } finally {
-    aiBusy = false;
-    aiSetInputEnabled(true);
-  }
-}
-
-window.app = window.app || {};
-
-window.app.openAIBuilder = async () => {
-  if (state.hasCustomPlan && !confirm('כבר יש לך תוכנית אימונים. לבנות מחדש ולהחליף אותה?')) return;
-  await startAISession({
-    title: '✨ בניית אימונים עם AI',
-    greeting: 'שלום! האם אתה מתאמן?',
-    createSession: createWorkoutInterview,
-    onComplete: async (res) => {
-      if (res.days && res.days.length) {
-        await applyAIPlan(res.days);
-        aiAppendBubble('ai', '✅ התוכנית נוספה לממשק! עובר למסך האימונים...');
-        setTimeout(() => {
-          closeModal('ai-modal');
-          aiInterview = null;
-          navigateTo('workouts');
-          showToast('💪 תוכנית האימונים נבנתה!');
-        }, 1400);
-      }
-    },
-  });
-};
-
-window.app.openOnboardingAgent = async () => {
-  await startAISession({
-    title: '🤖 בוא נכיר — הגדרת המערכת',
-    greeting: 'היי! בוא נגדיר לך את המערכת. האם אתה מתאמן?',
-    createSession: createOnboardingAgent,
-    onComplete: async (res) => {
-      await applyOnboarding(res.data);
-      aiAppendBubble('ai', '✅ סיימנו! כל הממידע נכנס למערכת. עובר לדשבורד...');
-      setTimeout(() => {
-        closeModal('ai-modal');
-        aiInterview = null;
-        navigateTo('home');
-        showToast('🎉 המערכת שלך מוכנה!');
-      }, 1600);
-    },
-  });
-};
-
-window.app.aiSend = async () => {
-  const inp = document.getElementById('ai-input');
-  if (!inp || !aiInterview || aiBusy) return;
-  const text = inp.value.trim();
-  if (!text) return;
-  
-  inp.value = '';
-  aiAppendBubble('user', text);
-  aiSetInputEnabled(false);
-  aiSetTyping(true);
-  aiBusy = true;
-
-  try {
-    const res = await aiInterview.send(text);
-    aiSetTyping(false);
-    if (res.reply) {
-      aiAppendBubble('ai', res.reply);
-    }
-    if (res.complete && aiOnComplete) {
-      await aiOnComplete(res);
-    }
-  } catch (e) {
-    console.error('AI error:', e);
-    aiSetTyping(false);
-    aiAppendBubble('ai', '⚠️ שגיאה בתקשורת עם ה-AI. נסה שוב.');
-  } finally {
-    aiBusy = false;
-    aiSetInputEnabled(true);
-  }
-};
-
-async function applyAIPlan(days) {
-  if (!Array.isArray(days)) return;
-  days.forEach((dayObj) => {
-    const dIdx = parseInt(dayObj.dayIndex);
-    if (isNaN(dIdx) || dIdx < 0 || dIdx > 6) return;
-    const dayType = WEEK_SCHEDULE[dIdx]?.type;
-    if (!dayType || dayType === 'rest' || dayType === 'swim1' || dayType === 'swim2') return;
-
-    if (dayObj.isRest) {
-      DEFAULT_EXERCISES[dayType] = [];
-    } else if (Array.isArray(dayObj.exercises) && dayObj.exercises.length > 0) {
-      DEFAULT_EXERCISES[dayType] = dayObj.exercises.map((ex) => ({
-        name: ex.name || 'תרגיל',
-        sets: Array.from({ length: parseInt(ex.sets) || 3 }, () =>
-          ex.weight ? { reps: ex.reps || '10', weight: ex.weight } : { reps: ex.reps || '10' }
-        ),
-        tag: `${ex.sets || 3}×${ex.reps || 10}${ex.weight ? ' ' + ex.weight : ''}`,
-      }));
-    }
-  });
-  state.hasCustomPlan = true;
-  await saveCustomExercises();
-  renderExercises();
-}
-
-async function applyOnboarding(data) {
-  data = data || {};
-
-  if (Array.isArray(data.workoutDays) && data.workoutDays.length) {
-    await applyAIPlan(data.workoutDays);
-  }
-
-  for (const b of (data.books || [])) {
-    const title = String(b.title || '').trim();
-    const pages = Math.max(1, parseInt(b.totalPages) || 0);
-    if (!title || pages < 1) continue;
-    const current = Math.max(0, Math.min(pages, parseInt(b.currentPage) || 0));
-    try {
-      const doc = await colBooks.add({ title, totalPages: pages, currentPage: current, finished: false });
-      state.books.push(doc);
-    } catch (e) { console.warn('onboarding book add failed:', e); }
-  }
-
-  for (const t of (data.tasks || [])) {
-    const txt = String(t.text || '').trim();
-    if (!txt) continue;
-    const category = t.category === 'weekly' ? 'weekly' : 'daily';
-    try {
-      const doc = await colTasks.add({ text: txt, category, done: false });
-      state.tasks.push(doc);
-    } catch (e) { console.warn('onboarding task add failed:', e); }
-  }
-
-  renderHome();
+  document.getElementById('streak-count').textContent = `${state.streak} שבועות ברצף`;
 }
 
 async function renderHome() {
+  const banner = document.getElementById('ai-setup-banner');
+  if (banner) {
+    if (!state.hasCustomPlan) {
+      banner.innerHTML = `
+        <div class="setup-card">
+          <div class="setup-card-icon">${ICON.bot}</div>
+          <div class="setup-card-title">בוא נכיר ונגדיר לך את המערכת</div>
+          <div class="setup-card-sub">הסוכן החכם ישאל אותך כמה שאלות על אימונים, ספרים, משימות ותחומים נוספים — והכול ייכנס אוטומטית למקומו.</div>
+          <button class="btn btn-ai btn-full" onclick="app.openOnboardingAgent()">התחל עם הסוכן</button>
+        </div>`;
+      banner.style.display = 'block';
+    } else {
+      banner.innerHTML = '';
+      banner.style.display = 'none';
+    }
+  }
+
   const dayIdx = new Date().getDay();
   const dayInfo = WEEK_SCHEDULE[dayIdx];
   const typeKey = dayInfo.type;
-
-  // Onboarding banner for new users
-  let banner = document.getElementById('home-onboard-banner');
-  if (!banner) {
-    banner = document.createElement('div');
-    banner.id = 'home-onboard-banner';
-    const screenHome = document.getElementById('screen-home');
-    if (screenHome) screenHome.insertBefore(banner, screenHome.firstChild);
-  }
-
-  const isNew = !state.hasCustomPlan && state.books.length === 0 && state.tasks.length === 0;
-  if (isNew) {
-    banner.innerHTML = `
-      <div class="setup-card">
-        <div class="setup-card-emoji">🤖</div>
-        <div class="setup-card-title">בוא נכיר ונגדיר לך את המערכת</div>
-        <div class="setup-card-sub">הסוכן החכם ישאל אותך כמה שאלות על אימונים, ספרים, משימות ותחומים נוספים — והכול ייכנס אוטומטית למקומו.</div>
-        <button class="btn btn-ai btn-full" onclick="app.openOnboardingAgent()">🤖 התחל עם הסוכן</button>
-      </div>`;
-  } else {
-    banner.innerHTML = '';
-  }
 
   const woCompEl = document.getElementById('today-workout-completion');
   const woNameEl = document.getElementById('today-workout-name');
   const woMetaEl = document.getElementById('today-workout-meta');
   const woBarEl  = document.getElementById('today-workout-bar');
 
-  woNameEl.textContent = `${dayInfo.icon} ${dayInfo.label}`;
+  woNameEl.textContent = dayInfo.label;
   woMetaEl.textContent = dayInfo.he;
 
   const exercises = DEFAULT_EXERCISES[typeKey] || [];
@@ -364,8 +201,8 @@ async function renderHome() {
     });
   });
   const pct = totalSets > 0 ? Math.round((doneSets / totalSets) * 100) : 0;
-  woCompEl.textContent   = `${pct}%`;
-  woBarEl.style.width    = `${pct}%`;
+  woCompEl.textContent = `${pct}%`;
+  woBarEl.style.width  = `${pct}%`;
 
   const bookCard = document.getElementById('home-book-card');
   const active   = state.books.find(b => !b.finished);
@@ -373,14 +210,14 @@ async function renderHome() {
     const bpct = Math.round((active.currentPage / active.totalPages) * 100);
     bookCard.innerHTML = `
       <div class="card-header">
-        <div class="card-title">📖 ספר פעיל</div>
+        <div class="card-title">ספר פעיל</div>
         <div class="stat-pill indigo">${bpct}%</div>
       </div>
       <div class="book-title">${escHtml(active.title)}</div>
       <div class="book-pages-display">עמוד ${active.currentPage} מתוך ${active.totalPages}</div>
       <div class="progress-bar mt-2"><div class="progress-fill indigo" style="width:${bpct}%"></div></div>`;
   } else {
-    bookCard.innerHTML = `<div class="empty-state"><div class="icon">📚</div><div class="msg">אין ספר פעיל</div></div>`;
+    bookCard.innerHTML = `<div class="empty-state"><div class="icon">${ICON.book}</div><div class="msg">אין ספר פעיל</div></div>`;
   }
 
   const taskSummaryEl = document.getElementById('home-tasks-summary');
@@ -388,22 +225,18 @@ async function renderHome() {
   taskSummaryEl.innerHTML = pending.length
     ? pending.slice(0,4).map(t => `
         <div class="task-item" style="background:var(--bg-card-2)">
-          <div class="task-checkbox ${t.done ? 'checked' : ''}">
-            ${t.done ? '✓' : ''}
-          </div>
+          <div class="task-checkbox ${t.done ? 'checked' : ''}">${t.done ? '✓' : ''}</div>
           <div class="task-text" style="cursor:default">${escHtml(t.text)}</div>
         </div>`).join('')
-    : `<div class="empty-state"><div class="icon">✅</div><div class="msg">כל המשימות הושלמו!</div></div>`;
+    : `<div class="empty-state"><div class="icon">${ICON.check}</div><div class="msg">כל המשימות הושלמו</div></div>`;
 }
 
 function renderWorkouts() {
   const tabsEl = document.getElementById('day-tabs');
   tabsEl.innerHTML = WEEK_SCHEDULE.map((d, i) => `
-    <button class="day-tab ${i === state.selectedDay ? 'active' : ''}"
-            onclick="app.selectDay(${i})">
-      ${d.icon} ${d.he}
+    <button class="day-tab ${i === state.selectedDay ? 'active' : ''}" onclick="app.selectDay(${i})">
+      ${escHtml(d.he)}
     </button>`).join('');
-
   renderExercises();
 }
 
@@ -414,17 +247,13 @@ function renderExercises() {
   const listEl   = document.getElementById('exercise-list');
 
   if (typeKey === 'rest') {
-    listEl.innerHTML = `<div class="empty-state"><div class="icon">😴</div>
-      <div class="msg">יום מנוחה!</div>
-      <div class="sub">מנוחה היא חלק מהאימון 💪</div></div>`;
+    listEl.innerHTML = `<div class="empty-state"><div class="icon">${ICON.rest}</div><div class="msg">יום מנוחה</div><div class="sub">מנוחה היא חלק מהאימון</div></div>`;
     document.getElementById('workout-progress-label').textContent = '';
     document.getElementById('workout-progress-bar').style.width = '0%';
     return;
   }
   if (typeKey === 'swim1' || typeKey === 'swim2') {
-    listEl.innerHTML = `<div class="empty-state"><div class="icon">🏊</div>
-      <div class="msg">${dayInfo.label}</div>
-      <div class="sub">להנות ולשחות! 🌊</div></div>`;
+    listEl.innerHTML = `<div class="empty-state"><div class="icon">${ICON.activity}</div><div class="msg">${escHtml(dayInfo.label)}</div><div class="sub">אימון שחייה</div></div>`;
     document.getElementById('workout-progress-label').textContent = '';
     document.getElementById('workout-progress-bar').style.width = '0%';
     return;
@@ -432,9 +261,7 @@ function renderExercises() {
 
   const exercises = DEFAULT_EXERCISES[typeKey] || [];
   if (exercises.length === 0) {
-    listEl.innerHTML = `<div class="empty-state"><div class="icon">🏋️</div>
-      <div class="msg">אין תרגילים עדיין</div>
-      <div class="sub">הוסף תרגיל חדש</div></div>`;
+    listEl.innerHTML = `<div class="empty-state"><div class="icon">${ICON.activity}</div><div class="msg">אין תרגילים עדיין</div><div class="sub">הוסף תרגיל חדש</div></div>`;
     document.getElementById('workout-progress-label').textContent = '0/0 • 0%';
     document.getElementById('workout-progress-bar').style.width = '0%';
     return;
@@ -462,34 +289,30 @@ function renderExercises() {
         ${ex.sets.map((s, si) => {
           const done = !!savedDay[`${ei}_${si}`];
           const label = s.weight ? `${s.reps} × ${s.weight}` : `${s.reps}`;
-          return `<button class="set-chip ${done ? 'done' : ''}"
-                    onclick="app.toggleSet(${state.selectedDay}, ${ei}, ${si})">
-                    ${done ? '✓ ' : ''}${escHtml(label)}
-                  </button>`;
+          return `<button class="set-chip ${done ? 'done' : ''}" onclick="app.toggleSet(${state.selectedDay}, ${ei}, ${si})">${done ? '✓ ' : ''}${escHtml(label)}</button>`;
         }).join('')}
       </div>
       <div class="exercise-actions">
-        <button class="icon-btn" title="ערוך" onclick="app.editExercise(${ei})">✏️</button>
-        <button class="icon-btn danger" title="מחק תרגיל" onclick="app.deleteExercise(${ei})">🗑️</button>
+        <button class="icon-btn" title="ערוך" aria-label="ערוך תרגיל" onclick="app.editExercise(${ei})">${ICON.edit}</button>
+        <button class="icon-btn danger" title="מחק תרגיל" aria-label="מחק תרגיל" onclick="app.deleteExercise(${ei})">${ICON.trash}</button>
       </div>
     </div>`;
   }).join('');
 }
 
+window.app = window.app || {};
 window.app.selectDay = (i) => { state.selectedDay = i; renderWorkouts(); };
 
 window.app.toggleSet = (dayIdx, exIdx, setIdx) => {
   const wk = weekKeyNow();
   if (state.workoutData._weekKey && state.workoutData._weekKey !== wk) {
-    Object.keys(state.workoutData).forEach(k => {
-      if (k !== '_weekKey') state.workoutData[k] = {};
-    });
+    Object.keys(state.workoutData).forEach(k => { if (k !== '_weekKey') state.workoutData[k] = {}; });
   }
   state.workoutData._weekKey = wk;
-
   if (!state.workoutData[dayIdx]) state.workoutData[dayIdx] = {};
   const key = `${exIdx}_${setIdx}`;
   state.workoutData[dayIdx][key] = !state.workoutData[dayIdx][key];
+  haptic(15);
   saveWorkoutData();
   renderExercises();
   if (state.currentScreen === 'home') renderHome();
@@ -497,17 +320,17 @@ window.app.toggleSet = (dayIdx, exIdx, setIdx) => {
 
 window.app.editExercise = (exIdx) => {
   const dayType = WEEK_SCHEDULE[state.selectedDay].type;
-  const ex      = DEFAULT_EXERCISES[dayType]?.[exIdx];
+  const ex = DEFAULT_EXERCISES[dayType]?.[exIdx];
   if (!ex) return;
   openModal('edit-exercise-modal');
-  document.getElementById('edit-ex-name').value   = ex.name;
-  document.getElementById('edit-ex-tag').value    = ex.tag;
-  document.getElementById('edit-ex-index').value  = exIdx;
+  document.getElementById('edit-ex-name').value  = ex.name;
+  document.getElementById('edit-ex-tag').value   = ex.tag;
+  document.getElementById('edit-ex-index').value = exIdx;
 };
 
 window.app.deleteExercise = (exIdx) => {
   const dayType = WEEK_SCHEDULE[state.selectedDay].type;
-  const ex      = DEFAULT_EXERCISES[dayType];
+  const ex = DEFAULT_EXERCISES[dayType];
   if (!ex) return;
   if (!confirm('למחוק את התרגיל?')) return;
   ex.splice(exIdx, 1);
@@ -520,7 +343,7 @@ async function saveWorkoutData() {
   try {
     const all = await colWorkouts.getAll();
     const existing = all.find(d => d.type === 'workout_sets');
-    const payload  = { type: 'workout_sets', data: JSON.stringify(state.workoutData) };
+    const payload = { type: 'workout_sets', data: JSON.stringify(state.workoutData) };
     if (existing) await colWorkouts.update(existing.id, payload);
     else           await colWorkouts.add(payload);
   } catch (e) { console.warn('Could not save workout data:', e); }
@@ -530,10 +353,20 @@ async function saveCustomExercises() {
   try {
     const all = await colWorkouts.getAll();
     const existing = all.find(d => d.type === 'custom_exercises');
-    const payload  = { type: 'custom_exercises', data: JSON.stringify(DEFAULT_EXERCISES) };
+    const payload = { type: 'custom_exercises', data: JSON.stringify(DEFAULT_EXERCISES) };
     if (existing) await colWorkouts.update(existing.id, payload);
     else           await colWorkouts.add(payload);
   } catch (e) { console.warn('Could not save custom exercises:', e); }
+}
+
+async function saveWeekSchedule() {
+  try {
+    const all = await colWorkouts.getAll();
+    const existing = all.find(d => d.type === 'week_schedule');
+    const payload = { type: 'week_schedule', data: JSON.stringify(WEEK_SCHEDULE) };
+    if (existing) await colWorkouts.update(existing.id, payload);
+    else           await colWorkouts.add(payload);
+  } catch (e) { console.warn('Could not save week schedule:', e); }
 }
 
 async function loadWorkoutData() {
@@ -544,9 +377,7 @@ async function loadWorkoutData() {
       state.workoutData = JSON.parse(setsDoc.data);
       const wk = weekKeyNow();
       if (state.workoutData._weekKey && state.workoutData._weekKey !== wk) {
-        Object.keys(state.workoutData).forEach(k => {
-          if (k !== '_weekKey') state.workoutData[k] = {};
-        });
+        Object.keys(state.workoutData).forEach(k => { if (k !== '_weekKey') state.workoutData[k] = {}; });
         state.workoutData._weekKey = wk;
         saveWorkoutData();
       }
@@ -555,9 +386,74 @@ async function loadWorkoutData() {
     if (exDoc?.data) {
       const saved = JSON.parse(exDoc.data);
       Object.keys(saved).forEach(key => { DEFAULT_EXERCISES[key] = saved[key]; });
-      state.hasCustomPlan = true;
     }
+    const schedDoc = all.find(d => d.type === 'week_schedule');
+    if (schedDoc?.data) {
+      const savedSchedule = JSON.parse(schedDoc.data);
+      if (Array.isArray(savedSchedule) && savedSchedule.length === 7) WEEK_SCHEDULE = savedSchedule;
+    }
+    state.hasCustomPlan = !!(schedDoc || exDoc);
   } catch (e) { console.warn('Could not load workout data:', e); }
+}
+
+async function applyAIPlan(days) {
+  const newSchedule = [];
+  const newExercises = { rest: [] };
+  for (let i = 0; i < 7; i++) {
+    const d = days.find(x => x.dayIndex === i);
+    if (!d || d.isRest || !Array.isArray(d.exercises) || d.exercises.length === 0) {
+      newSchedule.push({ he: HE_DAYS[i], day: EN_DAYS[i], type: 'rest', icon: '', label: (d && d.label) || 'מנוחה' });
+      continue;
+    }
+    const type = `d${i}`;
+    newSchedule.push({ he: HE_DAYS[i], day: EN_DAYS[i], type, icon: '', label: d.label || HE_DAYS[i] });
+    newExercises[type] = d.exercises.map(ex => {
+      const nSets  = Math.max(1, Math.min(12, parseInt(ex.sets) || 3));
+      const reps   = (ex.reps != null && String(ex.reps).trim()) || '10';
+      const weight = (ex.weight != null && String(ex.weight).trim()) || '';
+      return {
+        name: String(ex.name || 'תרגיל').trim(),
+        tag: `${nSets}×${reps}${weight ? ' ' + weight : ''}`,
+        sets: Array.from({ length: nSets }, () => weight ? { reps, weight } : { reps }),
+      };
+    });
+  }
+  WEEK_SCHEDULE = newSchedule;
+  Object.keys(DEFAULT_EXERCISES).forEach(k => delete DEFAULT_EXERCISES[k]);
+  Object.assign(DEFAULT_EXERCISES, newExercises);
+  state.workoutData = { _weekKey: weekKeyNow() };
+  state.selectedDay = new Date().getDay();
+  state.hasCustomPlan = true;
+  await Promise.all([saveWeekSchedule(), saveCustomExercises(), saveWorkoutData()]);
+  renderWorkouts();
+  renderHome();
+}
+
+async function applyOnboarding(data) {
+  data = data || {};
+  if (Array.isArray(data.workoutDays) && data.workoutDays.length) {
+    await applyAIPlan(data.workoutDays);
+  }
+  for (const b of (data.books || [])) {
+    const title = String(b.title || '').trim();
+    const pages = Math.max(1, parseInt(b.totalPages) || 0);
+    if (!title || pages < 1) continue;
+    const current = Math.max(0, Math.min(pages, parseInt(b.currentPage) || 0));
+    try {
+      const doc = await colBooks.add({ title, totalPages: pages, currentPage: current, finished: false });
+      state.books.push(doc);
+    } catch (e) { console.warn('onboarding book add failed:', e); }
+  }
+  for (const t of (data.tasks || [])) {
+    const txt = String(t.text || '').trim();
+    if (!txt) continue;
+    const category = t.category === 'weekly' ? 'weekly' : 'daily';
+    try {
+      const doc = await colTasks.add({ text: txt, category, done: false });
+      state.tasks.push(doc);
+    } catch (e) { console.warn('onboarding task add failed:', e); }
+  }
+  renderHome();
 }
 
 function renderBooks() {
@@ -568,7 +464,7 @@ function renderBooks() {
 
   listEl.innerHTML = active.length
     ? active.map(b => bookCard(b)).join('')
-    : `<div class="empty-state"><div class="icon">📚</div><div class="msg">אין ספרים פעילים</div></div>`;
+    : `<div class="empty-state"><div class="icon">${ICON.book}</div><div class="msg">אין ספרים פעילים</div></div>`;
 
   archEl.innerHTML = finished.length
     ? finished.map(b => `
@@ -577,7 +473,7 @@ function renderBooks() {
             <div class="archive-item-title">${escHtml(b.title)}</div>
             <div class="archive-item-meta">${b.totalPages} עמודים • ${escHtml(b.finishedDate || '—')}</div>
           </div>
-          <button class="icon-btn danger" onclick="app.deleteBook('${b.id}')">🗑️</button>
+          <button class="icon-btn danger" aria-label="מחק ספר" onclick="app.deleteBook('${b.id}')">${ICON.trash}</button>
         </div>`).join('')
     : `<div class="empty-state" style="padding:16px"><div class="msg text-muted">אין ספרים שסיימת עדיין</div></div>`;
 }
@@ -595,16 +491,15 @@ function bookCard(b) {
     </div>
     <div class="progress-bar"><div class="progress-fill indigo" style="width:${pct}%"></div></div>
     <div class="page-controls mt-2">
-      <input class="page-input" type="number" id="page-inp-${b.id}" 
-             value="${b.currentPage}" min="0" max="${b.totalPages}" style="max-width:90px">
+      <input class="page-input" type="number" id="page-inp-${b.id}" value="${b.currentPage}" min="0" max="${b.totalPages}" style="max-width:90px">
       <button class="quick-btn" onclick="app.incPage('${b.id}',1)">+1</button>
       <button class="quick-btn" onclick="app.incPage('${b.id}',5)">+5</button>
       <button class="quick-btn" onclick="app.incPage('${b.id}',10)">+10</button>
       <button class="btn btn-sm btn-primary" onclick="app.setPage('${b.id}')">שמור</button>
     </div>
     <div class="flex gap-2 mt-2">
-      ${pct >= 100 ? `<button class="btn btn-sm btn-primary" onclick="app.finishBook('${b.id}')">✅ סיימתי!</button>` : ''}
-      <button class="btn btn-sm btn-danger" onclick="app.deleteBook('${b.id}')">🗑️ מחק</button>
+      ${pct >= 100 ? `<button class="btn btn-sm btn-primary" onclick="app.finishBook('${b.id}')">סיימתי</button>` : ''}
+      <button class="btn btn-sm btn-danger" onclick="app.deleteBook('${b.id}')">מחק</button>
     </div>
   </div>`;
 }
@@ -614,18 +509,16 @@ window.app.incPage = async (id, n) => {
   if (!b) return;
   b.currentPage = Math.min(b.totalPages, b.currentPage + n);
   await colBooks.update(id, { currentPage: b.currentPage });
-  renderBooks();
-  renderHome();
+  renderBooks(); renderHome();
 };
 window.app.setPage = async (id) => {
-  const b   = state.books.find(x => x.id === id);
+  const b = state.books.find(x => x.id === id);
   const inp = document.getElementById(`page-inp-${id}`);
   if (!b || !inp) return;
   const val = Math.max(0, Math.min(b.totalPages, parseInt(inp.value) || 0));
   b.currentPage = val;
   await colBooks.update(id, { currentPage: val });
-  renderBooks();
-  renderHome();
+  renderBooks(); renderHome();
   showToast(`עמוד ${val} נשמר`);
 };
 window.app.finishBook = async (id) => {
@@ -634,16 +527,15 @@ window.app.finishBook = async (id) => {
   b.finished = true;
   b.finishedDate = new Date().toLocaleDateString('he-IL');
   await colBooks.update(id, { finished: true, finishedDate: b.finishedDate });
-  renderBooks();
-  renderHome();
-  showToast('🎉 כל הכבוד! סיימת את הספר!');
+  haptic([30, 50, 30]); celebrate();
+  renderBooks(); renderHome();
+  showToast('כל הכבוד! סיימת את הספר');
 };
 window.app.deleteBook = async (id) => {
   if (!confirm('למחוק את הספר?')) return;
   state.books = state.books.filter(b => b.id !== id);
   await colBooks.remove(id);
-  renderBooks();
-  renderHome();
+  renderBooks(); renderHome();
   showToast('ספר נמחק');
 };
 
@@ -653,26 +545,18 @@ function renderTasks() {
     const visMatch = state.showCompleted || !t.done;
     return catMatch && visMatch;
   });
-
   const listEl = document.getElementById('task-list');
   listEl.innerHTML = filtered.length
     ? filtered.map(t => `
         <div class="task-item ${t.done ? 'completed' : ''}" id="task-${t.id}">
-          <div class="task-checkbox ${t.done ? 'checked' : ''}" onclick="app.toggleTask('${t.id}')">
-            ${t.done ? '✓' : ''}
-          </div>
-          <div class="task-text" contenteditable="true"
-               onblur="app.editTask('${t.id}', this.textContent.trim())"
-               >${escHtml(t.text)}</div>
-          <button class="icon-btn danger" onclick="app.deleteTask('${t.id}')">🗑️</button>
+          <div class="task-checkbox ${t.done ? 'checked' : ''}" onclick="app.toggleTask('${t.id}')">${t.done ? '✓' : ''}</div>
+          <div class="task-text" contenteditable="true" onblur="app.editTask('${t.id}', this.textContent.trim())">${escHtml(t.text)}</div>
+          <button class="icon-btn danger" aria-label="מחק משימה" onclick="app.deleteTask('${t.id}')">${ICON.trash}</button>
         </div>`).join('')
-    : `<div class="empty-state"><div class="icon">${state.taskFilter==='daily'?'📋':'📅'}</div>
-        <div class="msg">אין משימות ${state.showCompleted?'':'פתוחות'}</div>
-        <div class="sub">הוסף משימה חדשה למטה ✨</div></div>`;
+    : `<div class="empty-state"><div class="icon">${ICON.list}</div><div class="msg">אין משימות ${state.showCompleted?'':'פתוחות'}</div><div class="sub">הוסף משימה חדשה למטה</div></div>`;
 
   document.getElementById('tab-daily').classList.toggle('active', state.taskFilter === 'daily');
   document.getElementById('tab-weekly').classList.toggle('active', state.taskFilter === 'weekly');
-
   const cnt = state.tasks.filter(t => t.category === state.taskFilter && t.done).length;
   document.getElementById('completed-count').textContent = cnt ? `${cnt} משימות הושלמו` : '';
 }
@@ -681,9 +565,9 @@ window.app.toggleTask = async (id) => {
   const t = state.tasks.find(x => x.id === id);
   if (!t) return;
   t.done = !t.done;
+  haptic(15);
   await colTasks.update(id, { done: t.done });
-  renderTasks();
-  renderHome();
+  renderTasks(); renderHome();
 };
 window.app.editTask = async (id, text) => {
   const t = state.tasks.find(x => x.id === id);
@@ -701,31 +585,28 @@ window.app.deleteTask = async (id) => {
   if (!confirm('למחוק את המשימה?')) return;
   state.tasks = state.tasks.filter(t => t.id !== id);
   await colTasks.remove(id);
-  renderTasks();
-  renderHome();
+  renderTasks(); renderHome();
   showToast('משימה נמחקה');
 };
 
 function renderLogs() {
   const historyEl = document.getElementById('log-history');
-  const sorted    = [...state.logs].sort((a, b) => (b._createdAt || 0) - (a._createdAt || 0));
-
+  const sorted = [...state.logs].sort((a, b) => (b._createdAt || 0) - (a._createdAt || 0));
   historyEl.innerHTML = sorted.slice(0, 30).map(log => `
     <div class="log-history-item">
       <div class="log-history-date">${escHtml(log.date || '—')}</div>
       <div class="log-history-content">
-        ${log.linux  ? `<div>🐧 <strong>Linux:</strong> ${escHtml(log.linux)}</div>`  : ''}
-        ${log.market ? `<div>📈 <strong>שוק:</strong> ${escHtml(log.market)}</div>` : ''}
-        ${log.win    ? `<div>🏆 <strong>Win:</strong> ${escHtml(log.win)}</div>`    : ''}
+        ${log.linux  ? `<div><strong>Linux:</strong> ${escHtml(log.linux)}</div>`  : ''}
+        ${log.market ? `<div><strong>שוק:</strong> ${escHtml(log.market)}</div>` : ''}
+        ${log.win    ? `<div><strong>Win:</strong> ${escHtml(log.win)}</div>`    : ''}
       </div>
     </div>`).join('') ||
-    `<div class="empty-state" style="padding:20px"><div class="icon">📓</div>
-      <div class="msg">אין רשומות עדיין</div></div>`;
+    `<div class="empty-state" style="padding:20px"><div class="icon">${ICON.journal}</div><div class="msg">אין רשומות עדיין</div></div>`;
 
   const u = state.user;
   document.getElementById('settings-user-name').textContent  = u?.displayName || u?.email || 'אורח';
   document.getElementById('settings-user-email').textContent = u?.email || '—';
-  document.getElementById('settings-mode-badge').textContent = isMockMode ? '🟡 מצב מקומי' : '🟢 Firebase';
+  document.getElementById('settings-mode-badge').textContent = isMockMode ? 'מצב מקומי' : 'Firebase';
   document.getElementById('settings-streak-val').textContent = `${state.streak} שבועות`;
 }
 
@@ -734,34 +615,181 @@ window.app.saveLog = async () => {
   const market = document.getElementById('log-market').value.trim();
   const win    = document.getElementById('log-win').value.trim();
   if (!linux && !market && !win) { showToast('מלא לפחות שדה אחד'); return; }
-
-  const payload = {
-    linux, market, win,
-    date: new Date().toLocaleDateString('he-IL'),
-    _createdAt: Date.now(),
-  };
+  const payload = { linux, market, win, date: new Date().toLocaleDateString('he-IL'), _createdAt: Date.now() };
   const saved = await colLogs.add(payload);
   state.logs.push(saved);
   document.getElementById('log-linux').value  = '';
   document.getElementById('log-market').value = '';
   document.getElementById('log-win').value    = '';
   renderLogs();
-  showToast('📓 יומן נשמר!');
+  showToast('היומן נשמר');
 };
 
 window.app.syncStreak = async () => {
   state.streak++;
   await settingsStore.set({ streak: state.streak });
-  updateHeader();
-  renderLogs();
-  showToast(`🔥 רצף: ${state.streak} שבועות!`);
+  updateHeader(); renderLogs();
+  showToast(`רצף: ${state.streak} שבועות`);
+};
+
+// ─── AI Controller ──────────────────────────────────────────
+let aiSession = null;
+let aiOnComplete = null;
+let aiBusy = false;
+
+function aiSetInputEnabled(enabled) {
+  const inp = document.getElementById('ai-input');
+  const btn = document.getElementById('ai-send-btn');
+  if (inp) inp.disabled = !enabled;
+  if (btn) btn.disabled = !enabled;
+}
+
+function aiSetTyping(typing) {
+  const box = document.getElementById('ai-chat-messages');
+  if (!box) return;
+  let t = document.getElementById('ai-typing-bubble');
+  if (typing) {
+    if (!t) {
+      t = document.createElement('div');
+      t.id = 'ai-typing-bubble';
+      t.className = 'ai-bubble ai typing';
+      t.innerHTML = '<span></span><span></span><span></span>';
+      box.appendChild(t);
+    }
+  } else if (t) {
+    t.remove();
+  }
+  box.scrollTop = box.scrollHeight;
+}
+
+function aiAppendBubble(sender, text) {
+  const box = document.getElementById('ai-chat-messages');
+  if (!box || !text) return;
+  const bubble = document.createElement('div');
+  bubble.className = `ai-bubble ${sender === 'user' ? 'user' : 'ai'}`;
+  bubble.textContent = text;
+  box.appendChild(bubble);
+  box.scrollTop = box.scrollHeight;
+}
+
+async function startAISession({ title, createSession, onComplete }) {
+  const titleEl = document.getElementById('ai-modal-title');
+  if (titleEl) titleEl.textContent = title;
+  aiOnComplete = onComplete;
+  openModal('ai-modal');
+  const box = document.getElementById('ai-chat-messages');
+  if (box) box.innerHTML = '';
+  aiSetInputEnabled(false);
+  aiSetTyping(true);
+  aiBusy = true;
+  try {
+    aiSession = await createSession();
+    const first = await aiSession.start();
+    aiSetTyping(false);
+    if (first?.reply) aiAppendBubble('ai', first.reply);
+    if (first?.complete && aiOnComplete) await aiOnComplete(first);
+  } catch (e) {
+    console.error('AI init error:', e);
+    aiSetTyping(false);
+    aiAppendBubble('ai', 'לא הצלחתי להתחבר ל-AI. ודא ש-Firebase AI Logic מופעל בקונסול.');
+  } finally {
+    aiBusy = false;
+    aiSetInputEnabled(true);
+  }
+}
+
+window.app.openAIBuilder = async () => {
+  if (state.hasCustomPlan && !confirm('כבר יש לך תוכנית אימונים. לבנות מחדש ולהחליף אותה?')) return;
+  await startAISession({
+    title: 'בניית אימונים עם AI',
+    createSession: createWorkoutInterview,
+    onComplete: async (res) => {
+      if (res.days && res.days.length) {
+        await applyAIPlan(res.days);
+        aiAppendBubble('ai', 'התוכנית נוספה בהצלחה! עובר למסך האימונים...');
+        setTimeout(() => {
+          closeModal('ai-modal');
+          aiSession = null;
+          navigateTo('workouts');
+          showToast('תוכנית האימונים נבנתה!');
+        }, 1400);
+      }
+    },
+  });
+};
+
+window.app.openOnboardingAgent = async () => {
+  await startAISession({
+    title: 'הגדרת המערכת',
+    createSession: createOnboardingAgent,
+    onComplete: async (res) => {
+      await applyOnboarding(res.data);
+      aiAppendBubble('ai', 'סיימנו! כל הממידע נכנס למערכת.');
+      setTimeout(() => {
+        closeModal('ai-modal');
+        aiSession = null;
+        navigateTo('home');
+        showToast('המערכת שלך מוכנה!');
+      }, 1600);
+    },
+  });
+};
+
+window.app.aiSend = async () => {
+  const inp = document.getElementById('ai-input');
+  if (!inp || !aiSession || aiBusy) return;
+  const text = inp.value.trim();
+  if (!text) return;
+  inp.value = '';
+  aiAppendBubble('user', text);
+  aiSetInputEnabled(false);
+  aiSetTyping(true);
+  aiBusy = true;
+  try {
+    const res = await aiSession.send(text);
+    aiSetTyping(false);
+    if (res?.reply) aiAppendBubble('ai', res.reply);
+    if (res?.complete && aiOnComplete) await aiOnComplete(res);
+  } catch (e) {
+    console.error('AI send error:', e);
+    aiSetTyping(false);
+    aiAppendBubble('ai', 'שגיאה בתקשורת עם ה-AI. נסה שוב.');
+  } finally {
+    aiBusy = false;
+    aiSetInputEnabled(true);
+  }
+};
+
+window.app.aiInputKey = (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); window.app.aiSend(); }
+};
+
+window.app.aiFillBook = async () => {
+  const inp = document.getElementById('new-book-title');
+  const pagesInp = document.getElementById('new-book-pages');
+  const btn = document.getElementById('ai-book-btn');
+  const title = inp ? inp.value.trim() : '';
+  if (!title) { showToast('הכנס שם ספר קודם'); return; }
+  const origText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  try {
+    const info = await lookupBook(title);
+    if (info?.totalPages > 0 && pagesInp) pagesInp.value = info.totalPages;
+    if (info?.title && inp) inp.value = info.title;
+    showToast(info?.found ? `נמצאו ${info.totalPages} עמודים!` : `הערכה: ${info.totalPages} עמודים`);
+  } catch (e) {
+    console.warn('AI book fill error:', e);
+    showToast('לא הצלחתי למצוא עמודים');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = origText; }
+  }
 };
 
 function setAuthBtnLoading(btnId, loading, originalText) {
   const btn = document.getElementById(btnId);
   if (!btn) return;
   btn.disabled = loading;
-  btn.textContent = loading ? '⏳ טוען...' : originalText;
+  btn.textContent = loading ? 'טוען...' : originalText;
 }
 
 const AUTH_ERRORS = {
@@ -793,6 +821,7 @@ window.app.authLogin = async () => {
     setAuthBtnLoading('auth-submit-btn', false, 'כניסה');
   }
 };
+
 window.app.authRegister = async () => {
   const email = document.getElementById('auth-email').value.trim();
   const pass  = document.getElementById('auth-pass').value;
@@ -807,31 +836,29 @@ window.app.authRegister = async () => {
     setAuthBtnLoading('auth-submit-btn', false, 'הרשמה');
   }
 };
+
 window.app.authGoogle = async () => {
   const btn = document.getElementById('btn-google');
   const origHtml = btn ? btn.innerHTML : '';
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ מתחבר לגוגל...'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'מתחבר לגוגל...'; }
   try {
     const user = await signInGoogle();
-    if (user) {
-      await onUserSignedIn(user);
-    }
+    if (user) await onUserSignedIn(user);
   } catch (e) {
     console.error('Google auth error:', e);
     showToast('Google: ' + authError(e));
     if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
   }
 };
+
 window.app.authDemo = async () => {
   signInDemo();
-  await onUserSignedIn({
-    uid: 'demo_user_local', email: 'demo@local', displayName: '👤 Demo User'
-  });
+  await onUserSignedIn({ uid: 'demo_user_local', email: 'demo@local', displayName: 'Demo User' });
 };
+
 window.app.logOut = async () => {
   await logOut();
-  state.user = null;
-  state.books = []; state.tasks = []; state.logs = []; state.streak = 0;
+  state.user = null; state.books = []; state.tasks = []; state.streak = 0;
   state.workoutData = {};
   showAuthScreen();
 };
@@ -856,9 +883,8 @@ window.app.submitAddBook = async () => {
   closeModal('add-book-modal');
   document.getElementById('new-book-title').value = '';
   document.getElementById('new-book-pages').value = '';
-  renderBooks();
-  renderHome();
-  showToast('📚 ספר חדש נוסף!');
+  renderBooks(); renderHome();
+  showToast('ספר חדש נוסף!');
 };
 
 window.app.submitAddTask = async () => {
@@ -868,8 +894,7 @@ window.app.submitAddTask = async () => {
   state.tasks.push(doc);
   closeModal('add-task-modal');
   document.getElementById('new-task-text').value = '';
-  renderTasks();
-  renderHome();
+  renderTasks(); renderHome();
   showToast('משימה חדשה נוספה!');
 };
 
@@ -888,9 +913,9 @@ window.app.submitEditExercise = () => {
 };
 
 window.app.submitAddExercise = () => {
-  const name = document.getElementById('new-ex-name').value.trim();
-  const sets = parseInt(document.getElementById('new-ex-sets').value) || 3;
-  const reps = document.getElementById('new-ex-reps').value.trim() || '10';
+  const name   = document.getElementById('new-ex-name').value.trim();
+  const sets   = parseInt(document.getElementById('new-ex-sets').value) || 3;
+  const reps   = document.getElementById('new-ex-reps').value.trim() || '10';
   const weight = document.getElementById('new-ex-weight').value.trim();
   if (!name) { showToast('הכנס שם תרגיל'); return; }
   const dayType = WEEK_SCHEDULE[state.selectedDay].type;
@@ -945,7 +970,6 @@ window.app.switchAuthMode = () => {
 async function onUserSignedIn(user) {
   state.user = user;
   initCollections();
-
   try {
     const [books, tasks, logs, settings] = await Promise.all([
       colBooks.getAll(),
@@ -957,9 +981,7 @@ async function onUserSignedIn(user) {
     state.tasks  = tasks;
     state.logs   = logs;
     state.streak = settings.streak || 0;
-  } catch (e) {
-    console.warn('Data load error:', e);
-  }
+  } catch (e) { console.warn('Data load error:', e); }
 
   await loadWorkoutData();
   updateHeader();
@@ -982,24 +1004,17 @@ async function bootstrap() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(console.warn);
   }
-
   showAuthScreen();
-
   try {
     const redirectUser = await checkRedirectResult();
     if (redirectUser) {
       await onUserSignedIn(redirectUser);
       return;
     }
-  } catch (e) {
-    console.warn('Redirect check failed:', e);
-  }
+  } catch (e) { console.warn('Redirect check failed:', e); }
 
   await initAuth(async (user) => {
-    if (!user) {
-      showAuthScreen();
-      return;
-    }
+    if (!user) { showAuthScreen(); return; }
     await onUserSignedIn(user);
   });
 }

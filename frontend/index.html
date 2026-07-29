@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#0F172A" />
+  <meta name="theme-color" content="#ffffff" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="קומנד סנטר" />
   <meta name="description" content="לוח בקרה אישי – מעקב אימונים, ספרים, משימות ולוג למידה יומי" />
   <title>Personal Command Center | לוח בקרה אישי</title>
@@ -19,13 +19,15 @@
 <body>
 
 <noscript>
-  <div style="padding:40px;text-align:center;background:#020617;color:#f1f5f9;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:sans-serif">
-    <p>⚡ Personal Command Center דורש JavaScript פעיל. אנא הפעל JavaScript בדפדפן.</p>
+  <div style="padding:40px;text-align:center;background:#eceef2;color:#16181d;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:sans-serif">
+    <p>Personal Command Center דורש JavaScript פעיל. אנא הפעל JavaScript בדפדפן.</p>
   </div>
 </noscript>
 
 <div id="auth-screen">
-  <div class="auth-logo">⚡</div>
+  <div class="auth-logo">
+    <svg viewBox="0 0 24 24"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>
+  </div>
   <h1 class="auth-title">Personal Command Center</h1>
   <p class="auth-subtitle">לוח הבקרה האישי שלך — אימונים, ספרים, משימות ולוג יומי</p>
 
@@ -40,7 +42,7 @@
     <div class="auth-divider">או</div>
 
     <button class="btn-google" id="btn-google" onclick="app.authGoogle()">
-      <svg width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <svg width="18" height="18" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
         <path d="M43.6 20.5H42V20H24v8h11.3C33.65 32.1 29.3 35 24 35c-6.1 0-11-4.9-11-11s4.9-11 11-11c2.8 0 5.4 1.05 7.35 2.75l5.65-5.65C33.45 7.1 28.95 5 24 5 12.95 5 4 13.95 4 25s8.95 20 20 20c11.05 0 20-8.95 20-20 0-1.35-.15-2.65-.4-3.5z" fill="#FBC02D"/>
         <path d="M6.3 14.7l6.55 4.8C14.65 16.1 19.05 13 24 13c2.8 0 5.4 1.05 7.35 2.75l5.65-5.65C33.45 7.1 28.95 5 24 5c-7.7 0-14.35 4.4-17.7 10.7z" fill="#E53935"/>
         <path d="M24 45c4.85 0 9.3-1.85 12.65-4.85l-5.85-4.95C29.05 36.6 26.6 37.5 24 37.5c-5.3 0-9.65-2.9-11.3-7l-6.5 5.05C9.65 40.6 16.3 45 24 45z" fill="#4CAF50"/>
@@ -51,9 +53,7 @@
 
     <div class="auth-divider">או בלי חשבון</div>
 
-    <button id="btn-demo" class="btn btn-ghost btn-full" onclick="app.authDemo()" style="border-color:var(--accent-emerald);color:var(--accent-emerald);font-size:15px">
-      ⚡ כנס כמשתמש Demo (ללא רישום)
-    </button>
+    <button id="btn-demo" class="btn btn-ghost btn-full" onclick="app.authDemo()">כניסה כאורח (Demo)</button>
 
     <p class="auth-switch text-center">
       <span id="auth-switch-link" onclick="app.switchAuthMode()">אין לך חשבון? הירשם</span>
@@ -66,19 +66,23 @@
   <header id="header">
     <div class="header-inner">
       <div>
-        <div class="header-title">⚡ קומנד סנטר</div>
+        <div class="header-title">קומנד סנטר</div>
         <div id="header-date" class="header-date"></div>
       </div>
-      <div id="streak-count" class="header-streak" role="status" aria-label="רצף שבועי">🔥 0 שבועות ברצף!</div>
-      <div class="header-profile" title="פרופיל" role="button" tabindex="0" aria-label="פרופיל והגדרות" onclick="app.navigateLogs()">👤</div>
+      <div id="streak-count" class="header-streak" role="status" aria-label="רצף שבועי">0 שבועות ברצף</div>
+      <div class="header-profile" title="פרופיל" role="button" tabindex="0" aria-label="פרופיל והגדרות" onclick="app.navigateLogs()">
+        <svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:#fff;fill:none;stroke-width:1.9"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      </div>
     </div>
   </header>
 
   <section id="screen-home" class="screen active">
 
+    <div id="ai-setup-banner" style="display:none"></div>
+
     <div class="card">
       <div class="card-header">
-        <div class="card-title">🏋️ אימון היום</div>
+        <div class="card-title">אימון היום</div>
         <div id="today-workout-completion" class="workout-completion">0%</div>
       </div>
       <div id="today-workout-name" class="today-workout-name">טוען…</div>
@@ -89,15 +93,15 @@
     </div>
 
     <div id="home-book-card" class="card">
-      <div class="empty-state"><div class="icon">📚</div><div class="msg">טוען ספרים…</div></div>
+      <div class="empty-state"><div class="msg">טוען…</div></div>
     </div>
 
     <div class="card">
       <div class="card-header">
-        <div class="card-title">📋 משימות יומיות פתוחות</div>
+        <div class="card-title">משימות יומיות פתוחות</div>
       </div>
       <div id="home-tasks-summary" class="task-list">
-        <div class="empty-state"><div class="icon">📋</div><div class="msg">טוען…</div></div>
+        <div class="empty-state"><div class="msg">טוען…</div></div>
       </div>
     </div>
 
@@ -105,13 +109,15 @@
 
   <section id="screen-workouts" class="screen">
 
+    <button class="btn btn-ai btn-full" onclick="app.openAIBuilder()">הוספה מהירה עם AI</button>
+
     <div class="card" style="padding:12px">
       <div id="day-tabs" class="day-tabs"></div>
     </div>
 
     <div class="card">
       <div class="card-header">
-        <div class="card-title">💪 תרגילים</div>
+        <div class="card-title">תרגילים</div>
         <div style="display:flex;gap:8px;align-items:center">
           <span id="workout-progress-label" class="text-sm text-muted">0/0 • 0%</span>
           <button class="card-action-btn" onclick="app.openModal('add-exercise-modal')">+ תרגיל</button>
@@ -120,7 +126,7 @@
       <div class="progress-bar">
         <div id="workout-progress-bar" class="progress-fill" style="width:0%"></div>
       </div>
-      <div id="exercise-list" class="exercise-list" style="margin-top:12px"></div>
+      <div id="exercise-list" class="exercise-list" style="margin-top:14px"></div>
     </div>
 
   </section>
@@ -128,16 +134,16 @@
   <section id="screen-books" class="screen">
 
     <div class="card-header" style="padding:0 4px">
-      <div class="card-title" style="font-size:16px;font-weight:800;color:var(--text-primary)">📖 ספרים פעילים</div>
+      <div class="card-title" style="font-size:16px">ספרים פעילים</div>
       <button class="btn btn-sm btn-indigo" onclick="app.openModal('add-book-modal')">+ הוסף ספר</button>
     </div>
 
     <div id="active-books-list" class="flex flex-col gap-3">
-      <div class="empty-state"><div class="icon">📚</div><div class="msg">טוען ספרים…</div></div>
+      <div class="empty-state"><div class="msg">טוען…</div></div>
     </div>
 
     <div class="card">
-      <div class="card-title" style="margin-bottom:12px">🏆 ספרים שסיימתי</div>
+      <div class="card-title" style="margin-bottom:12px">ספרים שסיימתי</div>
       <div id="finished-books-list" class="books-archive"></div>
     </div>
 
@@ -171,46 +177,46 @@
   <section id="screen-logs" class="screen">
 
     <div class="card">
-      <div class="card-title" style="margin-bottom:14px">📓 רפלקציה יומית</div>
+      <div class="card-title" style="margin-bottom:14px">רפלקציה יומית</div>
       <div class="log-form">
         <div class="log-input-group">
-          <label class="log-label" for="log-linux">🐧 פקודת Linux / טכנולוגיה של היום</label>
-          <textarea id="log-linux" class="log-textarea ltr" placeholder="e.g.  grep -r 'pattern' ./dir | wc -l"></textarea>
+          <label class="log-label" for="log-linux">פקודת Linux / טכנולוגיה של היום</label>
+          <textarea id="log-linux" class="log-textarea ltr" placeholder="grep -r 'pattern' ./dir | wc -l"></textarea>
         </div>
         <div class="log-input-group">
-          <label class="log-label" for="log-market">📈 הערה על שוק / גרף</label>
-          <textarea id="log-market" class="log-textarea" placeholder="נר יומי של BTC נסגר מעל ה-EMA 21…"></textarea>
+          <label class="log-label" for="log-market">הערה על שוק / גרף</label>
+          <textarea id="log-market" class="log-textarea" placeholder="נר יומי של BTC נסגר מעל ה-EMA 21"></textarea>
         </div>
         <div class="log-input-group">
-          <label class="log-label" for="log-win">🏆 Win היומי שלי</label>
-          <textarea id="log-win" class="log-textarea" placeholder="סיימתי את הפרק ב-Rust, הלכתי לאימון ב-07:00…"></textarea>
+          <label class="log-label" for="log-win">Win היומי שלי</label>
+          <textarea id="log-win" class="log-textarea" placeholder="סיימתי פרק ב-Rust, הלכתי לאימון ב-07:00"></textarea>
         </div>
-        <button class="btn btn-primary btn-full" onclick="app.saveLog()">💾 שמור יומן</button>
+        <button class="btn btn-primary btn-full" onclick="app.saveLog()">שמור יומן</button>
       </div>
     </div>
 
     <div class="card">
-      <div class="card-title" style="margin-bottom:12px">📚 היסטוריה</div>
+      <div class="card-title" style="margin-bottom:12px">היסטוריה</div>
       <div id="log-history" class="log-history"></div>
     </div>
 
     <div class="card">
-      <div class="card-title" style="margin-bottom:12px">⚙️ הגדרות</div>
+      <div class="card-title" style="margin-bottom:12px">הגדרות</div>
       <div class="settings-group">
         <div class="settings-row">
-          <div class="settings-row-label">👤 <span id="settings-user-name">—</span></div>
+          <div class="settings-row-label"><span id="settings-user-name">—</span></div>
           <div class="settings-row-value" id="settings-user-email"></div>
         </div>
         <div class="settings-row">
-          <div class="settings-row-label">🔗 מצב חיבור</div>
+          <div class="settings-row-label">מצב חיבור</div>
           <div class="settings-row-value" id="settings-mode-badge"></div>
         </div>
         <div class="settings-row" onclick="app.syncStreak()" style="cursor:pointer">
-          <div class="settings-row-label">🔥 עדכן רצף שבועי ידנית</div>
+          <div class="settings-row-label">עדכן רצף שבועי ידנית</div>
           <div class="settings-row-value" id="settings-streak-val">0 שבועות</div>
         </div>
         <div class="settings-row" onclick="app.logOut()" style="cursor:pointer">
-          <div class="settings-row-label" style="color:var(--accent-rose)">🚪 התנתקות</div>
+          <div class="settings-row-label" style="color:var(--high)">התנתקות</div>
         </div>
       </div>
     </div>
@@ -219,24 +225,24 @@
 
   <nav id="bottom-nav" aria-label="ניווט ראשי">
     <div class="nav-items">
-      <button class="nav-item active" data-screen="home"     id="nav-home" aria-current="page">
-        <span class="nav-icon">🏠</span>
+      <button class="nav-item active" data-screen="home" id="nav-home" aria-current="page">
+        <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg></span>
         <span class="nav-label">בית</span>
       </button>
       <button class="nav-item" data-screen="workouts" id="nav-workouts">
-        <span class="nav-icon">🏋️</span>
+        <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span>
         <span class="nav-label">אימונים</span>
       </button>
-      <button class="nav-item" data-screen="books"    id="nav-books">
-        <span class="nav-icon">📖</span>
+      <button class="nav-item" data-screen="books" id="nav-books">
+        <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>
         <span class="nav-label">ספרים</span>
       </button>
-      <button class="nav-item" data-screen="tasks"    id="nav-tasks">
-        <span class="nav-icon">📋</span>
+      <button class="nav-item" data-screen="tasks" id="nav-tasks">
+        <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>
         <span class="nav-label">משימות</span>
       </button>
-      <button class="nav-item" data-screen="logs"     id="nav-logs">
-        <span class="nav-icon">⚙️</span>
+      <button class="nav-item" data-screen="logs" id="nav-logs">
+        <span class="nav-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
         <span class="nav-label">לוג</span>
       </button>
     </div>
@@ -247,13 +253,16 @@
 <div id="add-book-modal" class="modal-overlay">
   <div class="modal-sheet" role="dialog" aria-modal="true" aria-labelledby="modal-book-title">
     <div class="modal-handle"></div>
-    <div id="modal-book-title" class="modal-title">📚 הוסף ספר חדש</div>
+    <div id="modal-book-title" class="modal-title">הוסף ספר חדש</div>
     <div class="modal-form">
       <input id="new-book-title" class="input-field" type="text" placeholder="שם הספר" autocomplete="off" />
-      <input id="new-book-pages" class="input-field" type="number" placeholder="מספר עמודים" min="1" />
+      <div class="flex gap-2">
+        <input id="new-book-pages" class="input-field" type="number" placeholder="מספר עמודים" min="1" style="flex:1" />
+        <button id="ai-book-btn" class="btn btn-ai" type="button" title="מלא אוטומטית עם AI" onclick="app.aiFillBook()" style="flex:0 0 auto">AI</button>
+      </div>
       <div class="flex gap-2">
         <button class="btn btn-primary btn-full" onclick="app.submitAddBook()">הוסף ספר</button>
-        <button class="btn btn-ghost"            onclick="app.closeModal('add-book-modal')">ביטול</button>
+        <button class="btn btn-ghost" onclick="app.closeModal('add-book-modal')">ביטול</button>
       </div>
     </div>
   </div>
@@ -262,12 +271,12 @@
 <div id="add-task-modal" class="modal-overlay">
   <div class="modal-sheet" role="dialog" aria-modal="true" aria-labelledby="modal-task-title">
     <div class="modal-handle"></div>
-    <div id="modal-task-title" class="modal-title">📋 הוסף משימה חדשה</div>
+    <div id="modal-task-title" class="modal-title">הוסף משימה חדשה</div>
     <div class="modal-form">
-      <input id="new-task-text" class="input-field" type="text" placeholder="תוכן המשימה…" autocomplete="off" />
+      <input id="new-task-text" class="input-field" type="text" placeholder="תוכן המשימה" autocomplete="off" />
       <div class="flex gap-2">
         <button class="btn btn-primary btn-full" onclick="app.submitAddTask()">הוסף</button>
-        <button class="btn btn-ghost"            onclick="app.closeModal('add-task-modal')">ביטול</button>
+        <button class="btn btn-ghost" onclick="app.closeModal('add-task-modal')">ביטול</button>
       </div>
     </div>
   </div>
@@ -276,7 +285,7 @@
 <div id="add-exercise-modal" class="modal-overlay">
   <div class="modal-sheet" role="dialog" aria-modal="true" aria-labelledby="modal-ex-title">
     <div class="modal-handle"></div>
-    <div id="modal-ex-title" class="modal-title">🏋️ הוסף תרגיל חדש</div>
+    <div id="modal-ex-title" class="modal-title">הוסף תרגיל חדש</div>
     <div class="modal-form">
       <input id="new-ex-name"   class="input-field" type="text"    placeholder="שם התרגיל" autocomplete="off" />
       <input id="new-ex-sets"   class="input-field" type="number"  placeholder="מספר סטים (ברירת מחדל: 3)" min="1" max="10" />
@@ -284,7 +293,7 @@
       <input id="new-ex-weight" class="input-field" type="text"    placeholder="משקל (אופציונלי: 20kg)" />
       <div class="flex gap-2">
         <button class="btn btn-primary btn-full" onclick="app.submitAddExercise()">הוסף תרגיל</button>
-        <button class="btn btn-ghost"            onclick="app.closeModal('add-exercise-modal')">ביטול</button>
+        <button class="btn btn-ghost" onclick="app.closeModal('add-exercise-modal')">ביטול</button>
       </div>
     </div>
   </div>
@@ -293,32 +302,32 @@
 <div id="edit-exercise-modal" class="modal-overlay">
   <div class="modal-sheet" role="dialog" aria-modal="true" aria-labelledby="modal-edit-ex-title">
     <div class="modal-handle"></div>
-    <div id="modal-edit-ex-title" class="modal-title">✏️ ערוך תרגיל</div>
+    <div id="modal-edit-ex-title" class="modal-title">ערוך תרגיל</div>
     <input type="hidden" id="edit-ex-index" />
     <div class="modal-form">
       <input id="edit-ex-name" class="input-field" type="text" placeholder="שם התרגיל" />
-      <input id="edit-ex-tag"  class="input-field" type="text" placeholder="תיאור (3×12 / Warmup…)" />
+      <input id="edit-ex-tag"  class="input-field" type="text" placeholder="תיאור (3×12 / Warmup)" />
       <div class="flex gap-2">
         <button class="btn btn-primary btn-full" onclick="app.submitEditExercise()">שמור שינויים</button>
-        <button class="btn btn-ghost"            onclick="app.closeModal('edit-exercise-modal')">ביטול</button>
+        <button class="btn btn-ghost" onclick="app.closeModal('edit-exercise-modal')">ביטול</button>
       </div>
     </div>
   </div>
 </div>
 
 <div id="ai-modal" class="modal-overlay">
-  <div class="modal-sheet ai-modal-sheet" role="dialog" aria-modal="true" aria-labelledby="ai-modal-title">
+  <div class="modal-sheet ai-sheet" role="dialog" aria-modal="true" aria-labelledby="ai-modal-title">
     <div class="modal-handle"></div>
-    <div class="flex items-center justify-between mb-3">
-      <div id="ai-modal-title" class="modal-title" style="margin-bottom:0">🤖 סוכן AI</div>
-      <button class="icon-btn" onclick="app.closeModal('ai-modal')">✕</button>
+    <div class="ai-header">
+      <div id="ai-modal-title" class="modal-title" style="margin-bottom:0">בניית אימונים עם AI</div>
+      <button class="icon-btn" aria-label="סגור" onclick="app.closeModal('ai-modal')">
+        <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
     </div>
-    <div id="ai-chat-messages" class="ai-chat-messages"></div>
-    <div id="ai-typing" class="ai-typing" style="display:none">
-      <span>🤖 ה-AI חושב...</span>
-    </div>
-    <div class="ai-input-row mt-2">
-      <input id="ai-input" class="input-field" type="text" placeholder="ענה לסוכן..." onkeydown="if(event.key==='Enter') app.aiSend()" />
+    <div id="ai-chat-messages" class="ai-chat-messages" aria-live="polite"></div>
+    <div class="ai-input-row">
+      <input id="ai-input" class="input-field" type="text" placeholder="הקלד תשובה" autocomplete="off"
+             onkeydown="app.aiInputKey(event)" />
       <button id="ai-send-btn" class="btn btn-primary" onclick="app.aiSend()">שלח</button>
     </div>
   </div>
