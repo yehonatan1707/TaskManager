@@ -1,20 +1,22 @@
-const CACHE_NAME = 'command-center-v1';
+const CACHE_NAME = 'command-center-v2';
 const ASSETS = [
   './',
-  './index.html',
-  './styles.css',
-  './app.js',
-  './firebase.js',
+  './index.html?v=2',
+  './styles.css?v=2',
+  './app.js?v=2',
+  './firebase.js?v=2',
+  './ai.js?v=2',
   './manifest.json',
   './assets/icon-192.png',
   './assets/icon-512.png'
 ];
 
 self.addEventListener('install', (e) => {
+  self.skipWaiting();
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS).catch(err => console.log('SW Cache Warmup Error: ', err));
-    }).then(() => self.skipWaiting())
+      return cache.addAll(ASSETS).catch(err => console.log('SW Cache Error: ', err));
+    })
   );
 });
 
@@ -51,7 +53,7 @@ self.addEventListener('fetch', (e) => {
               return cachedResponse;
             }
             if (e.request.mode === 'navigate') {
-              return caches.match('./index.html');
+              return caches.match('./index.html?v=2');
             }
           });
         })
