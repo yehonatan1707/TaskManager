@@ -681,7 +681,7 @@ async function startAISession({ title, createSession, onComplete }) {
   } catch (e) {
     console.error('AI init error:', e);
     aiSetTyping(false);
-    aiAppendBubble('ai', 'לא הצלחתי להתחבר ל-AI. ודא ש-Firebase AI Logic מופעל בקונסול.');
+    aiAppendBubble('ai', 'לא הצלחתי להתחבר ל-AI. נסה שוב.');
   } finally {
     aiBusy = false;
     aiSetInputEnabled(true);
@@ -717,7 +717,12 @@ window.app.toggleDomainChip = (domainKey) => {
     selectedDomainsSet.add(domainKey);
   }
   const chip = document.getElementById(`domain-chip-${domainKey}`);
-  if (chip) chip.classList.toggle('selected', selectedDomainsSet.has(domainKey));
+  if (chip) {
+    const isSel = selectedDomainsSet.has(domainKey);
+    chip.classList.toggle('selected', isSel);
+    const cb = chip.querySelector('.domain-chip-checkbox');
+    if (cb) cb.textContent = isSel ? '✓' : '';
+  }
 };
 
 window.app.addCustomDomain = () => {
@@ -782,15 +787,15 @@ window.app.openOnboardingAgent = async () => {
     <div id="domain-checklist-container" class="domain-checklist">
       <div id="domain-chip-workouts" class="domain-chip" onclick="app.toggleDomainChip('workouts')">
         <span>אימונים וכושר</span>
-        <span class="domain-chip-checkbox">✓</span>
+        <span class="domain-chip-checkbox"></span>
       </div>
       <div id="domain-chip-books" class="domain-chip" onclick="app.toggleDomainChip('books')">
         <span>קריאת ספרים</span>
-        <span class="domain-chip-checkbox">✓</span>
+        <span class="domain-chip-checkbox"></span>
       </div>
       <div id="domain-chip-tasks" class="domain-chip" onclick="app.toggleDomainChip('tasks')">
         <span>משימות והרגלים</span>
-        <span class="domain-chip-checkbox">✓</span>
+        <span class="domain-chip-checkbox"></span>
       </div>
     </div>
 
