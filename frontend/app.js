@@ -807,33 +807,28 @@ function authError(e) {
   return AUTH_ERRORS[code] || e.message || 'שגיאה לא ידועה';
 }
 
-window.app.authLogin = async () => {
+window.app.authSubmit = async () => {
   const email = document.getElementById('auth-email').value.trim();
   const pass  = document.getElementById('auth-pass').value;
   if (!email || !pass) { showToast('מלא אימייל וסיסמה'); return; }
-  setAuthBtnLoading('auth-submit-btn', true, 'כניסה');
+  setAuthBtnLoading('auth-submit-btn', true, 'מתחבר...');
   try {
-    const user = await signIn(email, pass);
-    if (user) await onUserSignedIn(user);
+    try {
+      const user = await signIn(email, pass);
+      if (user) { await onUserSignedIn(user); return; }
+    } catch (loginErr) {
+      if (loginErr.code === 'auth/user-not-found' || loginErr.code === 'auth/invalid-credential' || loginErr.code === 'auth/invalid-email') {
+        const newUser = await register(email, pass);
+        if (newUser) { await onUserSignedIn(newUser); return; }
+      } else {
+        throw loginErr;
+      }
+    }
   } catch (e) {
-    console.error('Login error:', e);
+    console.error('Auth error:', e);
     showToast(authError(e));
-    setAuthBtnLoading('auth-submit-btn', false, 'כניסה');
-  }
-};
-
-window.app.authRegister = async () => {
-  const email = document.getElementById('auth-email').value.trim();
-  const pass  = document.getElementById('auth-pass').value;
-  if (!email || !pass) { showToast('מלא אימייל וסיסמה'); return; }
-  setAuthBtnLoading('auth-submit-btn', true, 'הרשמה');
-  try {
-    const user = await register(email, pass);
-    if (user) await onUserSignedIn(user);
-  } catch (e) {
-    console.error('Register error:', e);
-    showToast(authError(e));
-    setAuthBtnLoading('auth-submit-btn', false, 'הרשמה');
+  } finally {
+    setAuthBtnLoading('auth-submit-btn', false, 'התחבר / הירשם');
   }
 };
 
@@ -846,7 +841,8 @@ window.app.authGoogle = async () => {
     if (user) await onUserSignedIn(user);
   } catch (e) {
     console.error('Google auth error:', e);
-    showToast('Google: ' + authError(e));
+    showToast(authError(e));
+  } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
   }
 };
