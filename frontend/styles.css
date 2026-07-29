@@ -463,15 +463,15 @@ body {
   user-select: none; font-size: 14px; font-weight: 700; color: var(--text-primary);
 }
 .domain-chip.selected {
-  background: var(--bg-card); border: 2px solid var(--primary); color: var(--text-primary);
+  background: var(--bg-card); border: 2px solid #16181d; color: var(--text-primary);
 }
 .domain-chip-checkbox {
-  width: 22px; height: 22px; border-radius: 6px; border: 1.5px solid var(--border);
+  width: 22px; height: 22px; border-radius: 6px; border: 2px solid #16181d;
   display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800;
   background: transparent; color: transparent; transition: all var(--t-fast);
 }
 .domain-chip.selected .domain-chip-checkbox {
-  background: var(--primary); border-color: var(--primary); color: #fff;
+  background: #16181d; border-color: #16181d; color: #fff;
 }
 .custom-domain-row { display: flex; gap: 8px; margin-top: 6px; }
 
