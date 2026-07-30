@@ -697,7 +697,7 @@ function aiAppendBubble(sender, text) {
   if (!box || !text) return;
   const bubble = document.createElement('div');
   bubble.className = `ai-bubble ${sender === 'user' ? 'user' : 'ai'}`;
-  bubble.textContent = text;
+  bubble.innerHTML = escHtml(text).replace(/\n/g, '<br>');
   box.appendChild(bubble);
   box.scrollTop = box.scrollHeight;
 }

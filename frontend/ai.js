@@ -1,5 +1,5 @@
 /**
- * ai.js — Intelligent Multi-turn Conversational AI Engine
+ * ai.js — Domain-Scoped Intelligent Conversational AI Engine
  */
 
 import { FIREBASE_CONFIG } from './firebase.js';
@@ -23,7 +23,7 @@ async function callGeminiRest(contents, systemInstruction) {
     systemInstruction: systemInstruction ? { parts: [{ text: systemInstruction }] } : undefined,
     generationConfig: {
       responseMimeType: 'application/json',
-      temperature: 0.6
+      temperature: 0.5
     }
   };
 
@@ -43,7 +43,7 @@ async function callGeminiRest(contents, systemInstruction) {
   return rawText;
 }
 
-/* ===== Conversational Intelligent Engine (Fallback) ===== */
+/* ===== Conversational Engine (Fallback) ===== */
 class IntelligentConversationalEngine {
   constructor(selectedDomains = ['workouts', 'books', 'tasks']) {
     this.selectedDomains = selectedDomains;
@@ -64,27 +64,27 @@ class IntelligentConversationalEngine {
     const firstDomain = this.currentDomain();
     if (firstDomain === 'workouts') {
       return {
-        reply: 'היי! ברוך הבא ל-Personal Command Center, כאן תוכל לתעד את חיי היום יום שלך ולעקוב אחר התקדמותך. נתחיל באימונים: כמה ימים בשבוע אתה מתאמן ואיזה פיצול (אילו שרירים בכל יום)?',
+        reply: 'היי! ברוך הבא ל-Personal Command Center, כאן תוכל לתעד את חיי היום יום שלך ולעקוב אחר התקדמותך.\n\nנתחיל באימונים: כמה ימים בשבוע אתה מתאמן ואיזה פיצול (אילו שרירים בכל יום)?',
         complete: false,
         data: this.data
       };
     }
     if (firstDomain === 'books') {
       return {
-        reply: 'היי! ברוך הבא ל-Personal Command Center. נתחיל בספרים: האם אתה קורא ספר כרגע? (כתוב שם ספר, מספר עמודים, ועמוד נוכחי, או "דילוג")',
+        reply: 'היי! ברוך הבא ל-Personal Command Center.\n\nנתחיל בספרים: האם אתה קורא ספר כרגע? (כתוב שם ספר, מספר עמודים, ועמוד נוכחי, או "דילוג")',
         complete: false,
         data: this.data
       };
     }
     if (firstDomain === 'tasks') {
       return {
-        reply: 'היי! ברוך הבא ל-Personal Command Center. נתחיל במשימות והרגלים: אילו משימות או הרגלים יומיים/שבועיים חשוב לך להשלים?',
+        reply: 'היי! ברוך הבא ל-Personal Command Center.\n\nנתחיל במשימות והרגלים: אילו משימות או הרגלים יומיים/שבועיים חשוב לך להשלים?',
         complete: false,
         data: this.data
       };
     }
     return {
-      reply: 'היי! ברוך הבא ל-Personal Command Center. ספר לי אילו תחומים תרצה לתעד במערכת?',
+      reply: 'היי! ברוך הבא ל-Personal Command Center.\n\nספר לי אילו תחומים תרצה לתעד במערכת?',
       complete: false,
       data: this.data
     };
@@ -94,20 +94,13 @@ class IntelligentConversationalEngine {
     const input = String(userText || '').trim();
     const lower = input.toLowerCase();
 
-    // Check for off-topic questions or requests for explanation (e.g. MCP SERVER, what is X...)
-    const isQuestion = lower.includes('?') || lower.includes('תסביר') || lower.includes('מה זה') || lower.includes('למה') || lower.includes('mcp') || lower.includes('server') || lower.includes('איך') || lower.includes('מי');
+    // Check if the input is an off-topic question outside the domain of personal tracking
+    const isDomainRelated = lower.includes('אימון') || lower.includes('כושר') || lower.includes('ספר') || lower.includes('משימ') || lower.includes('התקדמות') || lower.includes('תחום') || lower.includes('יום') || lower.includes('שבוע') || lower.includes('סט') || lower.includes('חזה') || lower.includes('גב') || lower.includes('רגליים') || lower.includes('עמוד');
+    const isOffTopicQuestion = (lower.includes('?') || lower.includes('תסביר') || lower.includes('מה זה') || lower.includes('למה') || lower.includes('איך') || lower.includes('מי') || lower.includes('mcp') || lower.includes('server')) && !isDomainRelated;
 
-    if (isQuestion && !lower.includes('אימון') && !lower.includes('ספר') && !lower.includes('משימ')) {
-      let explanation = 'אשמח להסביר! ';
-      if (lower.includes('mcp')) {
-        explanation += 'MCP (Model Context Protocol) הוא פרוטוקול סטנדרטי המאפשר לסוכני AI להתחבר בצורה מאובטחת לכלים, מסדי נתונים ושרתים חיצוניים.';
-      } else {
-        explanation += `קיבלתי את השאלה שלך בנושא "${input}".`;
-      }
-      explanation += `<br><br>עכשיו, בוא נחזור להגדרת ${this.getDomainName(this.currentDomain())}: ${this.getDomainQuestion(this.currentDomain())}`;
-
+    if (isOffTopicQuestion) {
       return {
-        reply: explanation,
+        reply: `תפקידי כסוכן הקליטה הוא לעזור לך להגדיר ולתעד אך ורק את תחומי העניין שלך במערכת (אימונים, ספרים, משימות).\n\nבוא נתמקד בהגדרת ${this.getDomainName(this.currentDomain())}: ${this.getDomainQuestion(this.currentDomain())}`,
         complete: false,
         data: this.data
       };
@@ -116,7 +109,7 @@ class IntelligentConversationalEngine {
     // Handle general greetings
     if (/^(היי|שלום|היוש|אהלן|hi|hello|hey)$/i.test(lower)) {
       return {
-        reply: `היי! שמח להכיר. אנחנו בשלב ${this.getDomainName(this.currentDomain())} — בוא נמלא את הפרטים: ${this.getDomainQuestion(this.currentDomain())}`,
+        reply: `היי! שמח להכיר. אנחנו בשלב ${this.getDomainName(this.currentDomain())} — בוא נמלא את הפרטים:\n${this.getDomainQuestion(this.currentDomain())}`,
         complete: false,
         data: this.data
       };
@@ -207,7 +200,7 @@ class IntelligentConversationalEngine {
       };
     }
     return {
-      reply: `${prefixMsg} עכשיו לגבי ${this.getDomainName(next)}: ${this.getDomainQuestion(next)}`,
+      reply: `${prefixMsg}\n\nעכשיו לגבי ${this.getDomainName(next)}: ${this.getDomainQuestion(next)}`,
       complete: false,
       data: this.data
     };
@@ -230,18 +223,16 @@ class IntelligentConversationalEngine {
   }
 }
 
-/* ===== Onboarding Agent Creator with Selected Domains Support ===== */
+/* ===== Onboarding Agent Creator ===== */
 export async function createOnboardingAgent(selectedDomains = ['workouts', 'books', 'tasks']) {
   const contents = [];
   const intelligentEngine = new IntelligentConversationalEngine(selectedDomains);
 
-  const ONBOARDING_SYSTEM = `אתה סוכן קליטה (onboarding) של אפליקציית "Personal Command Center".
-נהל ראיון עומק מותאם אישית למשתמש בעברית.
+  const ONBOARDING_SYSTEM = `אתה סוכן קליטה (onboarding) ממוקד ומקצועי של אפליקציית "Personal Command Center".
+נהל ראיון עומק בעברית להגדרת תחומי העניין של המשתמש: ${selectedDomains.join(', ')}.
 
-תחומי העניין שהמשתמש בחר לתעד: ${selectedDomains.join(', ')}.
-
-חוקים קשיחים לשיחה אינטליגנטית:
-1. הקשב לתשובות המשתמש! אם המשתמש שואל שאלה (כמו "תסביר לי על MCP SERVER"), ענה לו בקצרה ובנחמדות בעברית, ואז החזיר אותו להגדרת התחום הנוכחי. אל תניח שהוא ענה על התחום!
+חוקים קשיחים וחשובים ביותר:
+1. תחום אחריות מוגדר בלבד! אם המשתמש שואל שאלות כלליות שאינן קשורות ל-Personal Command Center או לתחומי העניין שנבחרו (כמו שאלות על תכנות, טכנולוגיה, פוליטיקה, שרתי MCP וכו') — אל תענה על השאלה הכללית. ענה בנימוס שאתה מיועד אך ורק להגדרת המערכת ותחומי העניין שלו, והחזר אותו מיד להגדרת התחום הנוכחי.
 2. אל תוותר על חצאי תשובות! אם המשתמש נתן תשובה חלקית (למשל ציין "6 ימים" באימונים אבל לא ציין אילו תרגילים/שרירים) — שאל שאלת המשך ממוקדת כדי להוציא ממנו את כל הפרטים.
 3. אל תעבור לתחום הבא עד שלא מילאת את הפרטים הנדרשים לתחום הנוכחי או שהמשתמש ביקש במפורש "דילוג".
 4. החזר JSON בלבד במבנה:

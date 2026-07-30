@@ -1,11 +1,11 @@
-const CACHE_NAME = 'command-center-v11';
+const CACHE_NAME = 'command-center-v12';
 const ASSETS = [
   './',
-  './index.html?v=11',
-  './styles.css?v=11',
-  './app.js?v=11',
-  './firebase.js?v=11',
-  './ai.js?v=11',
+  './index.html?v=12',
+  './styles.css?v=12',
+  './app.js?v=12',
+  './firebase.js?v=12',
+  './ai.js?v=12',
   './manifest.json',
   './assets/icon-192.png',
   './assets/icon-512.png'
