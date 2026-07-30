@@ -1,5 +1,5 @@
 /**
- * ai.js — Deep Template-Filling Conversational AI Agent & Adaptive Interview Engine
+ * ai.js — Intelligent Multi-turn Conversational AI Engine
  */
 
 import { FIREBASE_CONFIG } from './firebase.js';
@@ -43,10 +43,10 @@ async function callGeminiRest(contents, systemInstruction) {
   return rawText;
 }
 
-/* ===== Slot-Filling Conversational Fallback Engine ===== */
-class DeepSlotFillingEngine {
+/* ===== Conversational Intelligent Engine (Fallback) ===== */
+class IntelligentConversationalEngine {
   constructor(selectedDomains = ['workouts', 'books', 'tasks']) {
-    this.selectedDomains = selectedDomains; // e.g. ['workouts', 'books', 'tasks', 'custom:מדיטציה']
+    this.selectedDomains = selectedDomains;
     this.domainIndex = 0;
     this.slotStep = 0;
     this.data = {
@@ -94,7 +94,26 @@ class DeepSlotFillingEngine {
     const input = String(userText || '').trim();
     const lower = input.toLowerCase();
 
-    // Handle greetings
+    // Check for off-topic questions or requests for explanation (e.g. MCP SERVER, what is X...)
+    const isQuestion = lower.includes('?') || lower.includes('תסביר') || lower.includes('מה זה') || lower.includes('למה') || lower.includes('mcp') || lower.includes('server') || lower.includes('איך') || lower.includes('מי');
+
+    if (isQuestion && !lower.includes('אימון') && !lower.includes('ספר') && !lower.includes('משימ')) {
+      let explanation = 'אשמח להסביר! ';
+      if (lower.includes('mcp')) {
+        explanation += 'MCP (Model Context Protocol) הוא פרוטוקול סטנדרטי המאפשר לסוכני AI להתחבר בצורה מאובטחת לכלים, מסדי נתונים ושרתים חיצוניים.';
+      } else {
+        explanation += `קיבלתי את השאלה שלך בנושא "${input}".`;
+      }
+      explanation += `<br><br>עכשיו, בוא נחזור להגדרת ${this.getDomainName(this.currentDomain())}: ${this.getDomainQuestion(this.currentDomain())}`;
+
+      return {
+        reply: explanation,
+        complete: false,
+        data: this.data
+      };
+    }
+
+    // Handle general greetings
     if (/^(היי|שלום|היוש|אהלן|hi|hello|hey)$/i.test(lower)) {
       return {
         reply: `היי! שמח להכיר. אנחנו בשלב ${this.getDomainName(this.currentDomain())} — בוא נמלא את הפרטים: ${this.getDomainQuestion(this.currentDomain())}`,
@@ -112,11 +131,11 @@ class DeepSlotFillingEngine {
         return this.advanceToNextDomain('מדלגים על אימונים.');
       }
 
-      // Slot 0: Need split / exercise details if user only gave a number (e.g. "6 ימים")
-      if (this.slotStep === 0 && (/^\d+$/.test(input) || /^\d+\s*ימים/i.test(input) || lower.includes('פעמים'))) {
+      // If user only gave number of days (e.g., "6 ימים בשבוע") but didn't specify split/exercises
+      if (this.slotStep === 0 && (/^\d+$/.test(input) || /^\d+\s*ימים/i.test(input) || lower.includes('פעמים')) && !lower.includes('חזה') && !lower.includes('גב') && !lower.includes('רגליים')) {
         this.slotStep = 1;
         return {
-          reply: `מעולה, ${input}! אילו תרגילים או אזורי גוף תרצה לעשות בכל אחד מהימים (למשל: יום 1 חזה, יום 2 גב...)?`,
+          reply: `מעולה, ${input}! אילו תרגילים או אזורי גוף תרצה לעשות בכל אחד מאימוני השבוע (למשל: יום 1 חזה, יום 2 גב...)?`,
           complete: false,
           data: this.data
         };
@@ -214,17 +233,17 @@ class DeepSlotFillingEngine {
 /* ===== Onboarding Agent Creator with Selected Domains Support ===== */
 export async function createOnboardingAgent(selectedDomains = ['workouts', 'books', 'tasks']) {
   const contents = [];
-  const slotEngine = new DeepSlotFillingEngine(selectedDomains);
+  const intelligentEngine = new IntelligentConversationalEngine(selectedDomains);
 
   const ONBOARDING_SYSTEM = `אתה סוכן קליטה (onboarding) של אפליקציית "Personal Command Center".
 נהל ראיון עומק מותאם אישית למשתמש בעברית.
 
 תחומי העניין שהמשתמש בחר לתעד: ${selectedDomains.join(', ')}.
 
-חוקים קשיחים לראיון עומק (Slot-Filling):
-1. אל תוותר על חצאי תשובות! אם המשתמש נתן תשובה חלקית (למשל ציין "6 ימים" באימונים אבל לא ציין אילו תרגילים/שרירים) — שאל שאלת המשך ממוקדת כדי להוציא ממנו את כל הפרטים.
-2. אל תעבור לתחום הבא עד שלא מילאת את הפרטים הנדרשים לתחום הנוכחי או שהמשתמש ביקש במפורש "דילוג".
-3. אם המשתמש רק אומר "היי", "שלום" או מגיב קצר — ענה בנחמדות ושאל על התחום הנוכחי.
+חוקים קשיחים לשיחה אינטליגנטית:
+1. הקשב לתשובות המשתמש! אם המשתמש שואל שאלה (כמו "תסביר לי על MCP SERVER"), ענה לו בקצרה ובנחמדות בעברית, ואז החזיר אותו להגדרת התחום הנוכחי. אל תניח שהוא ענה על התחום!
+2. אל תוותר על חצאי תשובות! אם המשתמש נתן תשובה חלקית (למשל ציין "6 ימים" באימונים אבל לא ציין אילו תרגילים/שרירים) — שאל שאלת המשך ממוקדת כדי להוציא ממנו את כל הפרטים.
+3. אל תעבור לתחום הבא עד שלא מילאת את הפרטים הנדרשים לתחום הנוכחי או שהמשתמש ביקש במפורש "דילוג".
 4. החזר JSON בלבד במבנה:
 {
   "reply": "טקסט התגובה בעברית",
@@ -247,12 +266,12 @@ export async function createOnboardingAgent(selectedDomains = ['workouts', 'book
 
         const parsed = safeJson(rawJson, null);
         if (parsed && parsed.reply) {
-          return { reply: parsed.reply, complete: !!parsed.complete, data: parsed.data || slotEngine.data };
+          return { reply: parsed.reply, complete: !!parsed.complete, data: parsed.data || intelligentEngine.data };
         }
       } catch (e) {
-        console.warn('Gemini REST start failed, using DeepSlotFillingEngine:', e);
+        console.warn('Gemini REST start failed, using IntelligentEngine:', e);
       }
-      return slotEngine.start();
+      return intelligentEngine.start();
     },
 
     async send(userText) {
@@ -263,12 +282,12 @@ export async function createOnboardingAgent(selectedDomains = ['workouts', 'book
 
         const parsed = safeJson(rawJson, null);
         if (parsed && parsed.reply) {
-          return { reply: parsed.reply, complete: !!parsed.complete, data: parsed.data || slotEngine.data };
+          return { reply: parsed.reply, complete: !!parsed.complete, data: parsed.data || intelligentEngine.data };
         }
       } catch (e) {
-        console.warn('Gemini REST send failed, using DeepSlotFillingEngine:', e);
+        console.warn('Gemini REST send failed, using IntelligentEngine:', e);
       }
-      return slotEngine.send(userText);
+      return intelligentEngine.send(userText);
     }
   };
 }
